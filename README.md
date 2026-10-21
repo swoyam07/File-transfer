@@ -116,6 +116,18 @@ Only images (`.jpg .jpeg .png .heic`) and videos (`.mp4 .mov .mkv .avi`, optiona
 
 Files appear in the destination folder only after they pass every check. Rejected files are deleted and listed in the receiver log. See [SECURITY.md](SECURITY.md) for details.
 
+### Extra safety: check before using
+
+This app protects the files it transfers. Connecting two PCs still opens a network path between them, so malware that is already on one PC could attack the other through Windows file sharing or other services. Before each transfer:
+
+- [ ] Use a **direct cable** between the two PCs, not a shared office network or router if you can avoid it.
+- [ ] On Windows, set the network to **Public**. That turns off network discovery and file sharing.
+- [ ] **Turn off file and printer sharing**, and don't share any folders.
+- [ ] Leave the **firewall ON**. Only allow the receiver's port (for example `5001`).
+- [ ] Keep **Windows/Linux updated** and run an **antivirus scan** on the sender PC first.
+- [ ] Don't connect either PC to the internet through the other one (no bridging or internet sharing).
+- [ ] **Unplug the cable** when the transfer is done.
+
 ## Testing
 
 ```bash
