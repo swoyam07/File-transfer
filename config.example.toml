@@ -1,0 +1,99 @@
+[app]
+name = "Safe Media Transfer"
+mode = "sender"  # "sender" or "receiver"
+protocol_version = 1
+debug_logging = false
+theme = "system"
+# Set to true only for debugging purposes on isolated networks
+allow_remote_connections = false
+
+[network]
+# SECURITY: Use 127.0.0.1 for local-only transfers (secure)
+# For LAN transfers, use 0.0.0.0 or specific LAN IP
+bind_ip = "127.0.0.1"
+# SENDER: the receiver computer's LAN IP address
+receiver_ip = "192.168.50.2"
+port = 5001
+connect_timeout_seconds = 10
+read_timeout_seconds = 30
+write_timeout_seconds = 30
+heartbeat_interval_seconds = 10
+idle_disconnect_seconds = 90
+
+[transfer]
+# 4MB chunks (4194304 bytes) for optimal balance between speed and safety
+chunk_size_bytes = 4194304
+resume_enabled = true
+max_retries = 3
+max_file_count = 10000
+# 1TB max file size (1099511627776 bytes)
+max_file_size_bytes = 1099511627776
+max_manifest_bytes = 33554432
+# skip_identical = keep existing, rename_incoming = save as "name (1)", replace = overwrite, fail = skip with error
+duplicate_policy = "replace"
+
+[storage]
+# Change this to your preferred location
+default_destination = "C:\\SafeMediaTransfer\\Inbox"
+staging_suffix = ".part"
+state_suffix = ".part.json"
+report_folder = "reports"
+state_folder = "state"
+log_folder = "logs"
+
+[verification]
+# SECURITY: SHA256 integrity verification (essential for malware safety)
+sha256_enabled = true
+signature_validation_enabled = true
+
+[metadata]
+# SECURITY: remove EXIF/GPS/XMP/comments from images and container metadata,
+# GPS/telemetry tracks and attachments from videos (videos need ffmpeg on the sender).
+enabled = true
+mode = "strip"  # "strip" or "off"
+
+[allowed_extensions.images]
+# Only formats whose content can be fully validated are accepted:
+# .jpg .jpeg .png .heic .heif
+values = [".jpg", ".jpeg", ".png", ".heic"]
+
+[allowed_extensions.videos]
+# Supported: .mp4 .m4v .mov .mkv .webm .avi
+values = [".mp4", ".mkv", ".avi", ".mov"]
+
+[blocked_extensions]
+# SECURITY: Comprehensive blocking of potentially dangerous file types
+# Executables, scripts, archives, and system files are blocked by default
+values = [
+  # Windows executables and installers
+  ".exe", ".msi", ".dll", ".sys", ".bat", ".cmd", ".com",
+  # Scripts and interpreters
+  ".ps1", ".py", ".js", ".vbs", ".sh", ".bash", ".jar", ".pyw", ".pyc",
+  # Shortcuts
+  ".lnk", ".url", ".scr",
+  # Archives (can hide malware)
+  ".zip", ".rar", ".7z", ".iso", ".tar", ".gz", ".bz2", ".xz",
+  # Other potentially dangerous formats
+  ".app", ".dmg", ".deb", ".rpm", ".apk", ".inf", ".reg",
+  # Documents and web files that can carry scripts
+  ".pdf", ".svg", ".html", ".htm", ".hta"
+]
+
+[logging]
+# Max log file size (5MB before rotation)
+max_bytes = 5242880
+backup_count = 10
+# DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = "INFO"
+
+[security]
+# Both computers must use the same pairing code (at least 8 characters).
+# Leave empty to type it in the app window each time.
+pairing_code = ""
+# The receiver only accepts senders from these address ranges (LAN only).
+allowed_sender_networks = [
+  "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+]
+path_validation_enabled = true
+block_symlinks = true
+verify_file_boundaries = true

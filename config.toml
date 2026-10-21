@@ -1,0 +1,103 @@
+[app]
+name = "Safe Media Transfer"
+mode = "sender"  # Change to "sender" when running sender
+protocol_version = 1
+debug_logging = false
+theme = "system"
+allow_remote_connections = false
+
+[network]
+# RECEIVER: Use 0.0.0.0 to accept connections from any IP on LAN
+# SENDER: Use 127.0.0.1 for local-only or change to the receiver's IP
+bind_ip = "127.0.0.1" 
+# SENDER: Set this to the receiver's IP address
+receiver_ip = "192.168.50.2"  
+port = 5001
+connect_timeout_seconds = 10
+read_timeout_seconds = 30
+write_timeout_seconds = 30
+heartbeat_interval_seconds = 10
+idle_disconnect_seconds = 90
+
+[transfer]
+chunk_size_bytes = 4194304  # 4MB chunks
+resume_enabled = true
+max_retries = 3
+max_file_count = 10000
+max_file_size_bytes = 1099511627776  # 1TB
+max_manifest_bytes = 33554432
+duplicate_policy = "skip_identical"  # skip_identical, rename_incoming, replace, fail
+
+[storage]
+# RECEIVER: Where to save received files
+default_destination = "~/SafeMediaInbox"
+log_folder = "logs"
+report_folder = "reports"
+state_folder = "state"
+staging_suffix = ".part"
+state_suffix = ".part.json"
+
+[verification]
+# SECURITY: Always enabled for integrity checking
+sha256_enabled = true
+signature_validation_enabled = true
+
+[metadata]
+# SECURITY: remove EXIF/GPS/XMP/comments from images and container metadata,
+# GPS/telemetry tracks and attachments from videos (videos need ffmpeg on the sender).
+enabled = true
+mode = "strip"  # "strip" or "off"
+
+[allowed_extensions.images]
+# Only formats whose content can be fully validated are accepted:
+# .jpg .jpeg .png .heic .heif
+values = [".jpg", ".jpeg", ".png", ".heic"]
+
+[allowed_extensions.videos]
+# Supported: .mp4 .m4v .mov .mkv .webm .avi
+values = [".mp4", ".mkv", ".avi", ".mov"]
+
+[blocked_extensions]
+values = [
+  # Executables & system files
+  ".exe", ".msi", ".dll", ".sys", ".bat", ".cmd", ".com", ".scr", ".inf", ".reg",
+  # Scripts
+  ".ps1", ".py", ".pyw", ".pyc", ".js", ".vbs", ".sh", ".bash", ".jar", ".rb", ".pl",
+  # Shortcuts
+  ".lnk", ".url",
+  # Archives
+  ".zip", ".rar", ".7z", ".iso", ".tar", ".gz", ".bz2", ".xz", ".cab",
+  # Package installers
+  ".app", ".dmg", ".deb", ".rpm", ".apk",
+  # Audio (not needed)
+  ".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".wma",
+  # Other media you don't need
+  ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".ico",
+  # Documents that can carry scripts
+  ".pdf",
+  # Documents you don't need
+  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
+  # Config/data files
+  ".ini", ".cfg", ".xml", ".json", ".toml", ".yaml", ".yml", ".log",
+  # Web files
+  ".html", ".htm", ".css", ".php",
+  # Database
+  ".db", ".sqlite", ".sql"
+]
+
+[logging]
+level = "INFO"
+max_bytes = 5242880
+backup_count = 10
+
+[security]
+# Both computers must use the same pairing code (at least 8 characters).
+# Leave empty to type it in the app window each time.
+pairing_code = ""
+# The receiver only accepts senders from these address ranges (LAN only).
+allowed_sender_networks = [
+  "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16",
+]
+path_validation_enabled = true
+block_symlinks = true
+verify_file_boundaries = true

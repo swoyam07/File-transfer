@@ -1,0 +1,316 @@
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
+from PySide6.QtCore import QThread
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app.models.manifest import FileManifestEntry
+from app.models.transfer import AppConfig
+from app.security.auth import AuthError, validate_pairing_code
+from app.scanning.manifest_builder import build_transfer_manifest
+from app.ui.dialogs.settings_dialog import SettingsDialog
+from app.ui.workers.scan_worker import ScanWorker
+from app.ui.workers.send_worker import SendWorker
+from app.validation.extension_policy import ExtensionPolicy
+
+
+class SenderMainWindow(QMainWindow):
+    def __init__(self, config: AppConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.extension_policy = ExtensionPolicy.from_config(config.allowed_extensions, config.blocked_extensions)
+        self.setWindowTitle("Safe Media Transfer - Sender")
+        self.resize(820, 620)
+
+        self._scan_result = None
+        self._scan_thread: QThread | None = None
+        self._scan_worker: ScanWorker | None = None
+        self._send_thread: QThread | None = None
+        self._send_worker: SendWorker | None = None
+
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        self.receiver_ip_input = QLineEdit(config.network.receiver_ip)
+        self.port_input = QLineEdit(str(config.network.port))
+        self.pairing_input = QLineEdit(config.security.pairing_code)
+        self.pairing_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pairing_input.setPlaceholderText("Same code as on the receiver (min. 8 characters)")
+        self.source_folder_input = QLineEdit()
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+
+        self.browse_button = QPushButton("Browse")
+        self.scan_button = QPushButton("Scan")
+
+        # Standard transfer buttons
+        self.transfer_images_button = QPushButton("Transfer Images")
+        self.transfer_videos_button = QPushButton("Transfer Videos")
+        self.transfer_both_button = QPushButton("Transfer Both")
+        self.settings_button = QPushButton("Settings")
+
+        # Heavy video button — separate row, visually distinct
+        self.transfer_heavy_button = QPushButton("⚡  Transfer Heavy Video")
+        self.transfer_heavy_button.setToolTip(
+            "Optimised for large single video files (1GB+).\n"
+            "Uses 16MB chunks and streaming SHA256 — one disk read instead of two.\n"
+            "Use this for your biggest files. Not for images."
+        )
+        self.transfer_heavy_button.setStyleSheet(
+            "QPushButton { background-color: #2c5f8a; color: white; font-weight: bold; "
+            "padding: 6px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #3a7ab5; }"
+            "QPushButton:disabled { background-color: #555; color: #999; }"
+        )
+
+        self.overall_progress = QProgressBar()
+        self.current_progress = QProgressBar()
+
+        self.summary_label = QLabel("No scan results yet.")
+        self.status_label = QLabel("Idle")
+
+        top_form = QFormLayout()
+        top_form.addRow("Receiver IP", self.receiver_ip_input)
+        top_form.addRow("Port", self.port_input)
+        top_form.addRow("Pairing Code", self.pairing_input)
+        top_form.addRow("Source Folder", self.source_folder_input)
+
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(self.browse_button)
+        folder_row.addWidget(self.scan_button)
+
+        # Standard buttons row
+        standard_row = QHBoxLayout()
+        standard_row.addWidget(self.transfer_images_button)
+        standard_row.addWidget(self.transfer_videos_button)
+        standard_row.addWidget(self.transfer_both_button)
+        standard_row.addWidget(self.settings_button)
+
+        # Heavy video button gets its own full-width row with a label
+        heavy_label = QLabel("Large files (1GB+):")
+        heavy_row = QHBoxLayout()
+        heavy_row.addWidget(heavy_label)
+        heavy_row.addWidget(self.transfer_heavy_button)
+
+        summary_box = QGroupBox("Scan Summary")
+        summary_layout = QVBoxLayout()
+        summary_layout.addWidget(self.summary_label)
+        summary_box.setLayout(summary_layout)
+
+        # Separator label between standard and heavy
+        sep_label = QLabel("─────────────────────────────────────────────")
+        sep_label.setStyleSheet("color: #888;")
+
+        layout = QVBoxLayout()
+        layout.addLayout(top_form)
+        layout.addLayout(folder_row)
+        layout.addWidget(summary_box)
+        layout.addLayout(standard_row)
+        layout.addWidget(sep_label)
+        layout.addLayout(heavy_row)
+        layout.addWidget(QLabel("Current File Progress"))
+        layout.addWidget(self.current_progress)
+        layout.addWidget(QLabel("Overall Progress"))
+        layout.addWidget(self.overall_progress)
+        layout.addWidget(QLabel("Status"))
+        layout.addWidget(self.status_label)
+        layout.addWidget(QLabel("Logs"))
+        layout.addWidget(self.log_output)
+
+        central.setLayout(layout)
+
+        self.browse_button.clicked.connect(self._choose_source_folder)
+        self.scan_button.clicked.connect(self._start_scan)
+        self.transfer_images_button.clicked.connect(lambda: self._start_transfer(["images"], heavy=False))
+        self.transfer_videos_button.clicked.connect(lambda: self._start_transfer(["videos"], heavy=False))
+        self.transfer_both_button.clicked.connect(lambda: self._start_transfer(["images", "videos"], heavy=False))
+        self.transfer_heavy_button.clicked.connect(lambda: self._start_transfer(["videos"], heavy=True))
+        self.settings_button.clicked.connect(self._open_settings)
+
+    def _choose_source_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select Source Folder")
+        if folder:
+            self.source_folder_input.setText(folder)
+
+    def _start_scan(self) -> None:
+        source_folder = self.source_folder_input.text().strip()
+        if not source_folder:
+            QMessageBox.warning(self, "Missing folder", "Select a source folder first.")
+            return
+
+        if self._scan_thread is not None and self._scan_thread.isRunning():
+            self._append_log("Scan already in progress.")
+            return
+
+        self._append_log("Starting scan...")
+        self.status_label.setText("Scanning...")
+        self.scan_button.setEnabled(False)
+
+        self._scan_thread = QThread(self)
+        self._scan_worker = ScanWorker(source_folder, self.extension_policy)
+        self._scan_worker.moveToThread(self._scan_thread)
+
+        self._scan_thread.started.connect(self._scan_worker.run)
+        self._scan_worker.progress.connect(self._append_log)
+        self._scan_worker.finished.connect(self._handle_scan_finished)
+        self._scan_worker.failed.connect(self._handle_worker_error)
+        self._scan_worker.finished.connect(self._scan_thread.quit)
+        self._scan_worker.failed.connect(self._scan_thread.quit)
+        self._scan_thread.finished.connect(self._on_scan_thread_finished)
+
+        self._scan_thread.start()
+
+    def _on_scan_thread_finished(self) -> None:
+        self.scan_button.setEnabled(True)
+        if self._scan_worker is not None:
+            self._scan_worker.deleteLater()
+            self._scan_worker = None
+        if self._scan_thread is not None:
+            self._scan_thread.deleteLater()
+            self._scan_thread = None
+
+    def _handle_scan_finished(self, result) -> None:
+        self._scan_result = result
+        image_count = len(result.images)
+        image_size = sum(item.size_bytes for item in result.images)
+        video_count = len(result.videos)
+        video_size = sum(item.size_bytes for item in result.videos)
+        skipped_count = len(result.skipped)
+        warning_count = len(result.warnings)
+
+        def fmt(b):
+            if b >= 1024 ** 3:
+                return f"{b / 1024**3:.1f} GB"
+            if b >= 1024 ** 2:
+                return f"{b / 1024**2:.1f} MB"
+            return f"{b / 1024:.1f} KB"
+
+        self.summary_label.setText(
+            f"Images: {image_count} files / {fmt(image_size)} | "
+            f"Videos: {video_count} files / {fmt(video_size)} | "
+            f"Skipped: {skipped_count} | Warnings: {warning_count}"
+        )
+        self.status_label.setText("Scan complete")
+        for issue in result.skipped:
+            if issue.reason != "unsupported_extension":
+                self._append_log(f"Blocked: {issue.path} ({issue.reason})")
+        for issue in result.warnings:
+            self._append_log(f"Note: {issue.path} ({issue.reason})")
+        self._append_log("Scan completed.")
+
+    def _start_transfer(self, categories: list[str], heavy: bool = False) -> None:
+        if self._scan_result is None:
+            QMessageBox.warning(self, "No scan", "Run a scan before transfer.")
+            return
+
+        source_root = self.source_folder_input.text().strip()
+        receiver_ip = self.receiver_ip_input.text().strip()
+        port_text = self.port_input.text().strip()
+
+        if not source_root or not receiver_ip or not port_text:
+            QMessageBox.warning(self, "Missing values", "Receiver IP, port, and source folder are required.")
+            return
+        try:
+            pairing_code = validate_pairing_code(self.pairing_input.text())
+            port = int(port_text)
+        except (AuthError, ValueError) as exc:
+            QMessageBox.warning(self, "Invalid values", str(exc))
+            return
+
+        entries: list[FileManifestEntry] = []
+        if "images" in categories:
+            entries.extend(self._scan_result.images)
+        if "videos" in categories:
+            entries.extend(self._scan_result.videos)
+
+        if not entries:
+            QMessageBox.warning(self, "Nothing to send", "No files found in the selected categories.")
+            return
+
+        manifest = build_transfer_manifest(
+            session_id=str(uuid.uuid4()),
+            source_root=source_root,
+            selected_categories=categories,
+            entries=entries,
+        )
+
+        mode_label = "heavy video" if heavy else "standard"
+        self._append_log(f"Starting transfer ({mode_label} mode, {len(entries)} file(s))...")
+        self.status_label.setText("Transferring...")
+        self._set_transfer_buttons_enabled(False)
+
+        self._send_thread = QThread(self)
+        self._send_worker = SendWorker(
+            receiver_host=receiver_ip,
+            receiver_port=port,
+            pairing_code=pairing_code,
+            manifest=manifest,
+            source_root=source_root,
+            config=self.config,
+            extension_policy=self.extension_policy,
+            heavy_mode=heavy,
+        )
+        self._send_worker.moveToThread(self._send_thread)
+
+        self._send_thread.started.connect(self._send_worker.run)
+        self._send_worker.progress.connect(self._append_log)
+        self._send_worker.finished.connect(self._handle_send_finished)
+        self._send_worker.failed.connect(self._handle_worker_error)
+        self._send_worker.finished.connect(self._send_thread.quit)
+        self._send_worker.failed.connect(self._send_thread.quit)
+        self._send_thread.finished.connect(self._on_send_thread_finished)
+
+        self._send_thread.start()
+
+    def _on_send_thread_finished(self) -> None:
+        self._set_transfer_buttons_enabled(True)
+        if self._send_worker is not None:
+            self._send_worker.deleteLater()
+            self._send_worker = None
+        if self._send_thread is not None:
+            self._send_thread.deleteLater()
+            self._send_thread = None
+
+    def _set_transfer_buttons_enabled(self, enabled: bool) -> None:
+        self.transfer_images_button.setEnabled(enabled)
+        self.transfer_videos_button.setEnabled(enabled)
+        self.transfer_both_button.setEnabled(enabled)
+        self.transfer_heavy_button.setEnabled(enabled)
+
+    def _handle_send_finished(self, results) -> None:
+        sent = sum(1 for item in results if item.status == "sent")
+        problems = [item for item in results if item.status != "sent"]
+        self.status_label.setText(f"Transfer complete: {sent} sent, {len(problems)} not sent")
+        self.current_progress.setValue(100)
+        self.overall_progress.setValue(100)
+        for item in problems:
+            self._append_log(f"Not sent ({item.status}): {item.relative_path} - {item.reason}")
+        self._append_log(f"Transfer completed: {sent} of {len(results)} file(s) sent.")
+
+    def _handle_worker_error(self, message: str) -> None:
+        self.status_label.setText("Error")
+        self._append_log(f"Error: {message}")
+        QMessageBox.critical(self, "Worker error", message)
+
+    def _open_settings(self) -> None:
+        dialog = SettingsDialog(self)
+        dialog.exec()
+
+    def _append_log(self, message: str) -> None:
+        self.log_output.append(message)
