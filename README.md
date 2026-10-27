@@ -189,6 +189,7 @@ scripts/          # Windows run/build helpers
 
 ## Further docs
 
+- [INSTALL.md](INSTALL.md): what to install on Linux and Windows, step by step
 - [QUICKSTART.md](QUICKSTART.md): fastest way to get running
 - [SETUP_SENDER.md](SETUP_SENDER.md) and [SETUP_RECEIVER.md](SETUP_RECEIVER.md): step-by-step setup for each computer, with what to type in each window
 - [SETUP_GUIDE.md](SETUP_GUIDE.md) and [SETUP_SENDER_RECEIVER.md](SETUP_SENDER_RECEIVER.md): older combined setup guides

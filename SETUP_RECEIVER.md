@@ -25,6 +25,8 @@ Values used in this guide (change them if yours differ):
 
 ## Step 1. Install Python and the app
 
+Full instructions and fixes for common errors: [INSTALL.md](INSTALL.md).
+
 **Fedora**
 ```bash
 sudo dnf install python3

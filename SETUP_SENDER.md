@@ -27,6 +27,8 @@ Values used in this guide (change them if yours differ):
 
 ## Step 1. Install Python, ffmpeg and the app
 
+Full instructions and fixes for common errors: [INSTALL.md](INSTALL.md).
+
 ffmpeg removes video metadata (location, device, title) without re-encoding. Without it, videos are still checked and sent, but their metadata stays.
 
 **Fedora** (full ffmpeg comes from RPM Fusion)
