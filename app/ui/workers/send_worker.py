@@ -53,6 +53,7 @@ class SendWorker(QObject):
                 allow_remote=self.config.security.allow_remote_connections,
                 extension_policy=self.extension_policy,
                 connect_timeout=self.config.network.connect_timeout_seconds,
+                temp_folder=self.config.storage.sender_temp_folder,
                 progress=self.progress.emit,
             )
             results = sender.send_manifest(self.manifest, Path(self.source_root))

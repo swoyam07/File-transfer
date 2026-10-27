@@ -316,6 +316,47 @@ def test_pdf_and_mp3_transfer_end_to_end(tmp_path: Path, receiver: ReceiverServi
     assert (dest / "song.mp3").read_bytes() == make_mp3()
 
 
+def test_sender_cleans_up_temp_copies_after_batch(tmp_path: Path, receiver: ReceiverService) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    names = [f"photo{i}.jpg" for i in range(5)]
+    for name in names:
+        (source / name).write_bytes(make_jpeg(exif=make_exif()))
+    (source / "fake.png").write_bytes(EXE_BYTES)
+    temp = tmp_path / "temp"
+    temp.mkdir()
+
+    sender = SenderService(
+        receiver_host="127.0.0.1", receiver_port=receiver.port, pairing_code=PAIRING_CODE, temp_folder=temp
+    )
+    results = sender.send_manifest(_manifest(source, names[0], "fake.png", *names[1:]), source)
+
+    # Files are prepared one ahead of the one being sent; order and outcomes are kept.
+    assert [(r.relative_path, r.status) for r in results] == [
+        (names[0], "sent"), ("fake.png", "rejected"), *[(name, "sent") for name in names[1:]]
+    ]
+    assert list(temp.iterdir()) == []
+
+
+def test_sender_temp_folder_needs_room_for_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    small, big = tmp_path / "small", tmp_path / "big"
+    small.mkdir()
+    big.mkdir()
+    free = {str(small): 1024 ** 3, str(big): 100 * 1024 ** 3}
+
+    def fake_usage(folder: str):
+        return shutil._ntuple_diskusage(0, 0, free.get(str(folder), 0))
+
+    monkeypatch.setattr(shutil, "disk_usage", fake_usage)
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(big))
+    sender = SenderService(receiver_host="127.0.0.1", receiver_port=1, pairing_code=PAIRING_CODE, temp_folder=small)
+    assert sender._temp_root(100 * 1024 ** 2) == str(small)
+    # A 20 GB movie does not fit in the configured folder (or a RAM-backed /tmp).
+    assert sender._temp_root(20 * 1024 ** 3) == str(big)
+    with pytest.raises(ValueError, match="not_enough_temp_space"):
+        sender._temp_root(200 * 1024 ** 3)
+
+
 def test_wrong_pairing_code_is_refused(tmp_path: Path, receiver: ReceiverService) -> None:
     source = tmp_path / "src"
     source.mkdir()

@@ -37,6 +37,10 @@ duplicate_policy = "replace"
 default_destination = "C:\\SafeMediaTransfer\\Inbox"
 staging_suffix = ".part"
 state_suffix = ".part.json"
+# SENDER: folder for the metadata-free copy of each file before it is sent.
+# Empty = automatic (/var/tmp on Linux, %TEMP% on Windows). Pick a folder on
+# an SSD or on a different drive than the source files for the best speed.
+sender_temp_folder = ""
 report_folder = "reports"
 state_folder = "state"
 log_folder = "logs"

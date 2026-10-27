@@ -96,6 +96,20 @@ On Windows you can use `scripts\run_receiver.bat` and `scripts\run_sender.bat` i
 2. Run `sender_main.py` and choose a source folder.
 3. Click **Scan**, review the file list, then **Transfer**.
 
+### Fastest setup for a big transfer
+
+With hard drives on both PCs (~100 MB/s) and a 1 Gbps cable (~115 MB/s), the drives are the limit. Expect about **100 MB/s, or 2.5–3 hours for 800 GB**, if:
+
+1. **Both network cards show 1.0 Gbps.** Windows: Settings → Network → Ethernet → Link speed. Fedora: `ethtool <interface>`.
+2. **ffmpeg is installed on the sender** (`sudo dnf install ffmpeg` on Fedora, or add `ffmpeg.exe` to `PATH` on Windows).
+3. **The sender's temp folder is on a different drive than the videos**, ideally the SSD with the operating system. The default (`/var/tmp` on Fedora, `%TEMP%` on Windows) usually is. If not, set `sender_temp_folder` in `config.toml`. It needs free space for one copy of the largest movie.
+4. **The receiver's port is open in its firewall:**
+   - Fedora: `sudo firewall-cmd --add-port=5001/tcp`. This lasts until reboot.
+   - Windows: allow the app when Windows asks, or add an inbound rule for TCP port 5001.
+5. Use **Transfer All** for everything at once, or **Transfer Heavy Video** for a folder of long movies.
+
+The sender cleans the next file while the current one is being sent, so the source drive, cable and destination drive work at the same time. If the transfer stops, run it again with the same folders. With `duplicate_policy = "skip_identical"` on the receiver, finished files are skipped and the interrupted file continues where it left off. With `replace`, everything is sent again.
+
 ## Security model
 
 Only images (`.jpg .jpeg .png .heic`), videos (`.mp4 .mov .mkv .avi`, optionally `.m4v .webm`), audio (`.mp3`) and documents (`.pdf`) are transferred. Remove a type from `[allowed_extensions]` in `config.toml` to stop sending it. Every check runs on the sender **and again on the receiver**.

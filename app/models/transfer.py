@@ -42,6 +42,8 @@ class StorageConfig:
     state_folder: Path
     staging_suffix: str
     state_suffix: str
+    # Sender: where cleaned copies are written before sending (empty = automatic).
+    sender_temp_folder: Path | None = None
 
 
 @dataclass(slots=True)

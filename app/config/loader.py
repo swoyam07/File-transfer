@@ -87,6 +87,9 @@ def load_app_config(config_path: Path) -> AppConfig:
             state_folder=Path(storage["state_folder"]),
             staging_suffix=storage["staging_suffix"],
             state_suffix=storage["state_suffix"],
+            sender_temp_folder=Path(storage["sender_temp_folder"]).expanduser()
+            if storage.get("sender_temp_folder")
+            else None,
         ),
         verification=VerificationConfig(
             sha256_enabled=verification["sha256_enabled"],
