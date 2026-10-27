@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.models.manifest import FileManifestEntry, TransferManifest
-from app.models.reports import FileTransferReport, TransferSessionReport
+from app.models.manifest import FileTransferReport, TransferSessionReport
 
 
 def test_manifest_total_size() -> None:

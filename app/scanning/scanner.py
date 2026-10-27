@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.models.manifest import FileManifestEntry, ScanIssue, ScanResult
-from app.scanning.categorizer import category_for_extension
 from app.validation.extension_policy import ExtensionPolicy
 from app.validation.signature_policy import SignaturePolicy, SignatureResult
 

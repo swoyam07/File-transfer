@@ -1,5 +1,4 @@
-from .manifest import FileManifestEntry, TransferManifest
-from .reports import FileTransferReport, TransferSessionReport
+from .manifest import FileManifestEntry, FileTransferReport, TransferManifest, TransferSessionReport
 from .session import PairingSession, SessionPeerInfo
 from .transfer import AppConfig, LoggingConfig, NetworkConfig, StorageConfig, TransferConfig, VerificationConfig
 

@@ -38,6 +38,9 @@ _MAX_AUTH_FAILURES = 5
 _MAX_TOTAL_AUTH_FAILURES = 15
 _AUTH_LOCKOUT_SECONDS = 300.0
 _DEFAULT_MAX_FILE_SIZE = 1024 ** 4
+# How much data is received between resume points. Saving one costs two disk
+# flushes, which on a hard drive is far slower than writing a 4 MB chunk.
+_RESUME_SAVE_INTERVAL = 256 * 1024 * 1024
 
 
 class FileRejected(Exception):
@@ -335,23 +338,32 @@ class ReceiverService:
         digest = hashlib.sha256()
         scanner = ContentScanner()
         if offset:
-            # Re-hash and re-scan what was received in an earlier session.
+            # Re-hash and re-scan what was received in an earlier session, up to
+            # the resume point (anything after it is cut off below).
             with part_path.open("rb") as existing:
-                while chunk := existing.read(8 * 1024 * 1024):
+                remaining = offset
+                while remaining and (chunk := existing.read(min(8 * 1024 * 1024, remaining))):
                     digest.update(chunk)
                     scanner.feed(chunk)
+                    remaining -= len(chunk)
 
         started_at = utc_now_iso()
         with part_path.open("r+b" if offset else "wb") as handle:
             handle.seek(offset)
             handle.truncate()
-            bytes_written = offset
+            bytes_written = saved_at = offset
             while bytes_written < size:
                 chunk = transport.receive_exactly(min(chunk_size, size - bytes_written))
                 handle.write(chunk)
                 digest.update(chunk)
                 scanner.feed(chunk)
                 bytes_written += len(chunk)
+                if bytes_written - saved_at < _RESUME_SAVE_INTERVAL:
+                    continue
+                # The data must be on disk before the resume point that claims it.
+                handle.flush()
+                os.fsync(handle.fileno())
+                saved_at = bytes_written
                 self.resume_store.save(state_path, ResumeState(
                     state_version=1,
                     session_id=session_id,
@@ -407,13 +419,15 @@ class ReceiverService:
         if not (part_path.exists() and state_path.exists()):
             return 0
         try:
-            consistency = self.resume_store.check_consistency(part_path, state_path)
             state = self.resume_store.load(state_path)
+            part_size = part_path.stat().st_size
         except (OSError, ValueError, KeyError, TypeError):
             return 0
-        if not consistency.is_consistent or state.expected_size != size:
+        # The part usually runs past the last resume point; those bytes are
+        # cut off and sent again. Everything is re-hashed and checked anyway.
+        if state.expected_size != size or not 0 <= state.bytes_written <= min(part_size, size):
             return 0
-        return min(consistency.actual_part_size, size)
+        return state.bytes_written
 
     def _verify_and_clean(self, part_path: Path, extension: str) -> None:
         result = self._inspector.inspect(part_path, claimed_extension=extension)

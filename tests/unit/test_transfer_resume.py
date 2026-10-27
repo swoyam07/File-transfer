@@ -4,6 +4,8 @@ import socket
 import time
 from pathlib import Path
 
+import pytest
+
 from app.integrity.hashing import sha256_file
 from app.models.manifest import FileManifestEntry, TransferManifest
 from app.models.resume import ResumeState
@@ -21,7 +23,10 @@ def get_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def test_transfer_resumes_from_existing_partial_file(tmp_path: Path) -> None:
+# The receiver saves a resume point every few hundred MB, so after a crash the
+# part file usually holds more data than the last resume point records.
+@pytest.mark.parametrize("unrecorded_tail", [b"", b"written after the last resume point" * 50])
+def test_transfer_resumes_from_existing_partial_file(tmp_path: Path, unrecorded_tail: bytes) -> None:
     source_root = tmp_path / "source"
     destination_root = tmp_path / "dest"
     source_root.mkdir()
@@ -37,7 +42,7 @@ def test_transfer_resumes_from_existing_partial_file(tmp_path: Path) -> None:
     part_path = resume_store.part_file_path_for(final_path)
     state_path = resume_store.state_file_path_for(final_path)
 
-    part_path.write_bytes(source_bytes[:partial_size])
+    part_path.write_bytes(source_bytes[:partial_size] + unrecorded_tail)
     resume_store.save(
         state_path,
         ResumeState(

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from app.models.manifest import FileManifestEntry
 from app.models.transfer import AppConfig
 from app.security.auth import AuthError, validate_pairing_code
+from app.utils.size_utils import format_bytes
 from app.scanning.manifest_builder import build_transfer_manifest
 from app.ui.dialogs.settings_dialog import SettingsDialog
 from app.ui.workers.scan_worker import ScanWorker
@@ -198,15 +199,8 @@ class SenderMainWindow(QMainWindow):
         skipped_count = len(result.skipped)
         warning_count = len(result.warnings)
 
-        def fmt(b):
-            if b >= 1024 ** 3:
-                return f"{b / 1024**3:.1f} GB"
-            if b >= 1024 ** 2:
-                return f"{b / 1024**2:.1f} MB"
-            return f"{b / 1024:.1f} KB"
-
         parts = [
-            f"{label}: {len(entries)} files / {fmt(sum(item.size_bytes for item in entries))}"
+            f"{label}: {len(entries)} files / {format_bytes(sum(item.size_bytes for item in entries))}"
             for label, entries in (
                 ("Images", result.images),
                 ("Videos", result.videos),
