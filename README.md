@@ -101,7 +101,7 @@ On Windows you can use `scripts\run_receiver.bat` and `scripts\run_sender.bat` i
 With hard drives on both PCs (~100 MB/s) and a 1 Gbps cable (~115 MB/s), the drives are the limit. Expect about **100 MB/s, or 2.5–3 hours for 800 GB**, if:
 
 1. **Both network cards show 1.0 Gbps.** Windows: Settings → Network → Ethernet → Link speed. Fedora: `ethtool <interface>`.
-2. **ffmpeg is installed on the sender** (`sudo dnf install ffmpeg` on Fedora, or add `ffmpeg.exe` to `PATH` on Windows).
+2. **ffmpeg is installed on the sender**: from RPM Fusion on Fedora, or `winget install Gyan.FFmpeg` on Windows. See [SETUP_SENDER.md](SETUP_SENDER.md).
 3. **The sender's temp folder is on a different drive than the videos**, ideally the SSD with the operating system. The default (`/var/tmp` on Fedora, `%TEMP%` on Windows) usually is. If not, set `sender_temp_folder` in `config.toml`. It needs free space for one copy of the largest movie.
 4. **The receiver's port is open in its firewall:**
    - Fedora: `sudo firewall-cmd --add-port=5001/tcp`. This lasts until reboot.
@@ -190,5 +190,6 @@ scripts/          # Windows run/build helpers
 ## Further docs
 
 - [QUICKSTART.md](QUICKSTART.md): fastest way to get running
-- [SETUP_GUIDE.md](SETUP_GUIDE.md) and [SETUP_SENDER_RECEIVER.md](SETUP_SENDER_RECEIVER.md): two-PC setup
+- [SETUP_SENDER.md](SETUP_SENDER.md) and [SETUP_RECEIVER.md](SETUP_RECEIVER.md): step-by-step setup for each computer, with what to type in each window
+- [SETUP_GUIDE.md](SETUP_GUIDE.md) and [SETUP_SENDER_RECEIVER.md](SETUP_SENDER_RECEIVER.md): older combined setup guides
 - [SECURITY.md](SECURITY.md): security design
