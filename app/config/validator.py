@@ -135,6 +135,10 @@ def validate_raw_config(raw: dict[str, Any], config_path: Path) -> None:
     _require_str(storage, "state_suffix")
     if "sender_temp_folder" in storage and not isinstance(storage["sender_temp_folder"], str):
         raise ConfigError("storage.sender_temp_folder must be a string")
+    if "rejected_folder" in storage and not isinstance(storage["rejected_folder"], str):
+        raise ConfigError("storage.rejected_folder must be a string")
+    if "move_rejected_files" in transfer and not isinstance(transfer["move_rejected_files"], bool):
+        raise ConfigError("transfer.move_rejected_files must be true or false")
 
     _require_bool(verification, "sha256_enabled")
     _require_bool(verification, "signature_validation_enabled")

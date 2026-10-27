@@ -125,6 +125,43 @@ python sender_main.py
 
 **If it stops** (cable unplugged, PC restarted), click **Scan** and the same button again. Finished files are skipped and the interrupted file continues where it stopped. This needs `duplicate_policy = "skip_identical"` on the receiver.
 
+## Files that fail the checks are moved aside
+
+Files that are corrupted, in the wrong format or unsafe are **moved** (not copied, not repaired, not sent) out of your source folder into **one** folder next to it. Subfolders are kept, and `reasons.csv` says why each file was moved.
+
+```
+D:\Media\                       D:\Media_rejected\
+├── Trip\                       ├── Trip\
+│   ├── clip1.mp4  ✅ sent       │   ├── broken.mp4      ◀ moved here
+│   ├── broken.mp4 ──────────▶  │   └── fake.jpg        ◀ moved here
+│   └── fake.jpg   ──────────▶  ├── Family\
+├── Family\                     │   ├── bad1.jpg        ◀ moved here
+│   ├── bad1.jpg   ──────────▶  │   ├── bad2.png        ◀ moved here
+│   ├── bad2.png   ──────────▶  │   └── virus.pdf       ◀ moved here
+│   ├── virus.pdf  ──────────▶  └── reasons.csv
+│   └── photo.jpg  ✅ sent
+```
+
+`reasons.csv` (opens in Excel or LibreOffice):
+
+| time | original_path | reason | moved_to |
+| --- | --- | --- | --- |
+| 2026-10-27T10:00:00Z | `Trip/broken.mp4` | `mp4_truncated` | `Trip/broken.mp4` |
+| 2026-10-27T10:00:00Z | `Trip/fake.jpg` | `extension_mismatch:content_is_png` | `Trip/fake.jpg` |
+| 2026-10-27T10:05:12Z | `Family/virus.pdf` | `receiver: pdf_active_content:JavaScript` | `Family/virus.pdf` |
+
+Files are moved when **Scan** finds a problem, and also after a transfer if the sender or receiver rejected them.
+
+These are **not** moved, because nothing is wrong with the file itself:
+- types this app doesn't send (`.txt`, `.docx`, ...)
+- files damaged on the cable (`hash_mismatch`); just transfer again
+- files skipped because the receiver already has them
+
+| Setting in `config.toml` | Value |
+| --- | --- |
+| `[transfer] move_rejected_files` | `true` = move bad files (default in this setup), `false` = leave them in place |
+| `[storage] rejected_folder` | `""` = next to the source folder (`D:\Media` → `D:\Media_rejected`), or any folder you choose |
+
 ## Optional: save the values in `config.toml`
 
 ```toml

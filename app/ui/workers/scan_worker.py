@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.scanning.scanner import FileScanner
+from app.transfer.rejected_files import RejectedFiles, is_file_problem
 from app.validation.extension_policy import ExtensionPolicy
 from app.validation.signature_policy import SignaturePolicy
 
@@ -14,10 +15,16 @@ class ScanWorker(QObject):
     failed = Signal(str)
     progress = Signal(str)
 
-    def __init__(self, source_root: str, extension_policy: ExtensionPolicy) -> None:
+    def __init__(
+        self,
+        source_root: str,
+        extension_policy: ExtensionPolicy,
+        rejected: RejectedFiles | None = None,
+    ) -> None:
         super().__init__()
         self.source_root = source_root
         self.extension_policy = extension_policy
+        self.rejected = rejected
 
     @Slot()
     def run(self) -> None:
@@ -27,8 +34,26 @@ class ScanWorker(QObject):
                 extension_policy=self.extension_policy,
                 signature_policy=SignaturePolicy(self.extension_policy, enabled=True),
             )
-            result = scanner.scan(Path(self.source_root))
+            result = scanner.scan(Path(self.source_root), exclude=self.rejected.folder if self.rejected else None)
+            if self.rejected is not None:
+                move_rejected(self.rejected, [
+                    (Path(issue.path).relative_to(result.source_root).as_posix(), issue.reason)
+                    for issue in result.skipped
+                    if is_file_problem(issue.reason)
+                ], self.progress.emit)
             self.progress.emit("Scan completed.")
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+def move_rejected(rejected: RejectedFiles, files: list[tuple[str, str]], report) -> None:
+    moved = 0
+    for relative_path, reason in files:
+        try:
+            if rejected.move(relative_path, reason) is not None:
+                moved += 1
+        except OSError as exc:
+            report(f"Could not move {relative_path} to the rejected folder: {exc}")
+    if moved:
+        report(f"Moved {moved} rejected file(s) to {rejected.folder} (see reasons.csv)")

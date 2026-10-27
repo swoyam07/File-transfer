@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from app.models.manifest import FileManifestEntry
 from app.models.transfer import AppConfig
 from app.security.auth import AuthError, validate_pairing_code
+from app.transfer.rejected_files import RejectedFiles
 from app.utils.size_utils import format_bytes
 from app.scanning.manifest_builder import build_transfer_manifest
 from app.ui.dialogs.settings_dialog import SettingsDialog
@@ -172,7 +173,7 @@ class SenderMainWindow(QMainWindow):
         self.scan_button.setEnabled(False)
 
         self._scan_thread = QThread(self)
-        self._scan_worker = ScanWorker(source_folder, self.extension_policy)
+        self._scan_worker = ScanWorker(source_folder, self.extension_policy, self._rejected_files(source_folder))
         self._scan_worker.moveToThread(self._scan_thread)
 
         self._scan_thread.started.connect(self._scan_worker.run)
@@ -266,6 +267,7 @@ class SenderMainWindow(QMainWindow):
             config=self.config,
             extension_policy=self.extension_policy,
             heavy_mode=heavy,
+            rejected=self._rejected_files(source_root),
         )
         self._send_worker.moveToThread(self._send_thread)
 
@@ -287,6 +289,11 @@ class SenderMainWindow(QMainWindow):
         if self._send_thread is not None:
             self._send_thread.deleteLater()
             self._send_thread = None
+
+    def _rejected_files(self, source_folder: str) -> RejectedFiles | None:
+        if not self.config.transfer.move_rejected_files:
+            return None
+        return RejectedFiles(Path(source_folder), self.config.storage.rejected_folder)
 
     def _set_transfer_buttons_enabled(self, enabled: bool) -> None:
         self.transfer_images_button.setEnabled(enabled)

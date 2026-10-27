@@ -31,6 +31,10 @@ max_file_size_bytes = 1099511627776
 max_manifest_bytes = 33554432
 # skip_identical = keep existing, rename_incoming = save as "name (1)", replace = overwrite, fail = skip with error
 duplicate_policy = "replace"
+# SENDER: move files that fail the checks (corrupted, wrong format, unsafe)
+# out of the source folder into rejected_folder, with reasons.csv saying why.
+# They are moved as they are: not repaired and not sent.
+move_rejected_files = true
 
 [storage]
 # Change this to your preferred location
@@ -41,6 +45,9 @@ state_suffix = ".part.json"
 # Empty = automatic (/var/tmp on Linux, %TEMP% on Windows). Pick a folder on
 # an SSD or on a different drive than the source files for the best speed.
 sender_temp_folder = ""
+# SENDER: where rejected files are moved. Empty = next to the source folder,
+# e.g. D:\Media -> D:\Media_rejected. Subfolders are kept.
+rejected_folder = ""
 report_folder = "reports"
 state_folder = "state"
 log_folder = "logs"

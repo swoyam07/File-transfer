@@ -133,7 +133,7 @@ Only images (`.jpg .jpeg .png .heic`), videos (`.mp4 .mov .mkv .avi`, optionally
 | Path tricks (`../`, `C:`, `file.jpg:stream`, `CON`) | Rejected before anything is written |
 | Huge messages / disk filling | Message size limits, per-file size limit, free-space check |
 
-Files appear in the destination folder only after they pass every check. Rejected files are deleted and listed in the receiver log. See [SECURITY.md](SECURITY.md) for details.
+Files appear in the destination folder only after they pass every check. Rejected files are deleted and listed in the receiver log. On the sender, files that fail because they are corrupted, in the wrong format or unsafe are moved (not repaired or sent) into one `<source>_rejected` folder, with `reasons.csv` saying why. See [SETUP_SENDER.md](SETUP_SENDER.md#files-that-fail-the-checks-are-moved-aside). See [SECURITY.md](SECURITY.md) for details.
 
 ### Extra safety: check before using
 

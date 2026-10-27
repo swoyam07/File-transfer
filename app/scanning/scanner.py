@@ -16,11 +16,14 @@ class FileScanner:
         self._extension_policy = extension_policy
         self._signature_policy = signature_policy
 
-    def scan(self, source_root: Path) -> ScanResult:
+    def scan(self, source_root: Path, *, exclude: Path | None = None) -> ScanResult:
         source_root = source_root.resolve()
         result = ScanResult(source_root=source_root)
+        exclude = exclude.resolve() if exclude else None
 
         for path in sorted(source_root.rglob("*")):
+            if exclude is not None and path.is_relative_to(exclude):
+                continue  # the rejected-files folder, if it was put inside the source
             if path.is_symlink():
                 result.skipped.append(ScanIssue(path=path, reason="symlink_not_allowed"))
                 continue

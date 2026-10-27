@@ -79,6 +79,7 @@ def load_app_config(config_path: Path) -> AppConfig:
             max_file_size_bytes=transfer["max_file_size_bytes"],
             max_manifest_bytes=transfer["max_manifest_bytes"],
             duplicate_policy=transfer["duplicate_policy"],
+            move_rejected_files=transfer.get("move_rejected_files", False),
         ),
         storage=StorageConfig(
             default_destination=Path(storage["default_destination"]).expanduser(),
@@ -90,6 +91,7 @@ def load_app_config(config_path: Path) -> AppConfig:
             sender_temp_folder=Path(storage["sender_temp_folder"]).expanduser()
             if storage.get("sender_temp_folder")
             else None,
+            rejected_folder=Path(storage["rejected_folder"]).expanduser() if storage.get("rejected_folder") else None,
         ),
         verification=VerificationConfig(
             sha256_enabled=verification["sha256_enabled"],

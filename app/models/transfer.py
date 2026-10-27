@@ -32,6 +32,8 @@ class TransferConfig:
     max_file_size_bytes: int
     max_manifest_bytes: int
     duplicate_policy: str
+    # Sender: move files that fail the checks into the rejected folder.
+    move_rejected_files: bool = False
 
 
 @dataclass(slots=True)
@@ -44,6 +46,8 @@ class StorageConfig:
     state_suffix: str
     # Sender: where cleaned copies are written before sending (empty = automatic).
     sender_temp_folder: Path | None = None
+    # Sender: where rejected files are moved (empty = next to the source folder).
+    rejected_folder: Path | None = None
 
 
 @dataclass(slots=True)
