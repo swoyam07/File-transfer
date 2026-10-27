@@ -19,7 +19,7 @@ import hashlib
 import hmac
 import secrets
 
-MIN_PAIRING_CODE_LENGTH = 8
+MIN_PAIRING_CODE_LENGTH = 12
 NONCE_BYTES = 32
 _KDF_SALT = b"safe-media-transfer/pairing/v2"
 _KDF_ITERATIONS = 200_000

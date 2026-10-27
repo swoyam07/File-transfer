@@ -51,7 +51,7 @@ class SenderMainWindow(QMainWindow):
         self.port_input = QLineEdit(str(config.network.port))
         self.pairing_input = QLineEdit(config.security.pairing_code)
         self.pairing_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pairing_input.setPlaceholderText("Same code as on the receiver (min. 8 characters)")
+        self.pairing_input.setPlaceholderText("Same code as on the receiver (min. 12 characters)")
         self.source_folder_input = QLineEdit()
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
@@ -62,7 +62,9 @@ class SenderMainWindow(QMainWindow):
         # Standard transfer buttons
         self.transfer_images_button = QPushButton("Transfer Images")
         self.transfer_videos_button = QPushButton("Transfer Videos")
-        self.transfer_both_button = QPushButton("Transfer Both")
+        self.transfer_audio_button = QPushButton("Transfer Audio")
+        self.transfer_documents_button = QPushButton("Transfer PDFs")
+        self.transfer_both_button = QPushButton("Transfer All")
         self.settings_button = QPushButton("Settings")
 
         # Heavy video button — separate row, visually distinct
@@ -99,6 +101,8 @@ class SenderMainWindow(QMainWindow):
         standard_row = QHBoxLayout()
         standard_row.addWidget(self.transfer_images_button)
         standard_row.addWidget(self.transfer_videos_button)
+        standard_row.addWidget(self.transfer_audio_button)
+        standard_row.addWidget(self.transfer_documents_button)
         standard_row.addWidget(self.transfer_both_button)
         standard_row.addWidget(self.settings_button)
 
@@ -139,7 +143,11 @@ class SenderMainWindow(QMainWindow):
         self.scan_button.clicked.connect(self._start_scan)
         self.transfer_images_button.clicked.connect(lambda: self._start_transfer(["images"], heavy=False))
         self.transfer_videos_button.clicked.connect(lambda: self._start_transfer(["videos"], heavy=False))
-        self.transfer_both_button.clicked.connect(lambda: self._start_transfer(["images", "videos"], heavy=False))
+        self.transfer_audio_button.clicked.connect(lambda: self._start_transfer(["audio"], heavy=False))
+        self.transfer_documents_button.clicked.connect(lambda: self._start_transfer(["documents"], heavy=False))
+        self.transfer_both_button.clicked.connect(
+            lambda: self._start_transfer(["images", "videos", "audio", "documents"], heavy=False)
+        )
         self.transfer_heavy_button.clicked.connect(lambda: self._start_transfer(["videos"], heavy=True))
         self.settings_button.clicked.connect(self._open_settings)
 
@@ -187,10 +195,6 @@ class SenderMainWindow(QMainWindow):
 
     def _handle_scan_finished(self, result) -> None:
         self._scan_result = result
-        image_count = len(result.images)
-        image_size = sum(item.size_bytes for item in result.images)
-        video_count = len(result.videos)
-        video_size = sum(item.size_bytes for item in result.videos)
         skipped_count = len(result.skipped)
         warning_count = len(result.warnings)
 
@@ -201,11 +205,16 @@ class SenderMainWindow(QMainWindow):
                 return f"{b / 1024**2:.1f} MB"
             return f"{b / 1024:.1f} KB"
 
-        self.summary_label.setText(
-            f"Images: {image_count} files / {fmt(image_size)} | "
-            f"Videos: {video_count} files / {fmt(video_size)} | "
-            f"Skipped: {skipped_count} | Warnings: {warning_count}"
-        )
+        parts = [
+            f"{label}: {len(entries)} files / {fmt(sum(item.size_bytes for item in entries))}"
+            for label, entries in (
+                ("Images", result.images),
+                ("Videos", result.videos),
+                ("Audio", result.audio),
+                ("PDFs", result.documents),
+            )
+        ]
+        self.summary_label.setText(" | ".join([*parts, f"Skipped: {skipped_count}", f"Warnings: {warning_count}"]))
         self.status_label.setText("Scan complete")
         for issue in result.skipped:
             if issue.reason != "unsupported_extension":
@@ -234,10 +243,8 @@ class SenderMainWindow(QMainWindow):
             return
 
         entries: list[FileManifestEntry] = []
-        if "images" in categories:
-            entries.extend(self._scan_result.images)
-        if "videos" in categories:
-            entries.extend(self._scan_result.videos)
+        for category in categories:
+            entries.extend(self._scan_result.category_entries(category))
 
         if not entries:
             QMessageBox.warning(self, "Nothing to send", "No files found in the selected categories.")
@@ -290,6 +297,8 @@ class SenderMainWindow(QMainWindow):
     def _set_transfer_buttons_enabled(self, enabled: bool) -> None:
         self.transfer_images_button.setEnabled(enabled)
         self.transfer_videos_button.setEnabled(enabled)
+        self.transfer_audio_button.setEnabled(enabled)
+        self.transfer_documents_button.setEnabled(enabled)
         self.transfer_both_button.setEnabled(enabled)
         self.transfer_heavy_button.setEnabled(enabled)
 

@@ -83,3 +83,36 @@ def make_avi(*, trailing: bytes = b"") -> bytes:
     movi = b"LIST" + struct.pack("<I", 4 + 4) + b"movi" + b"\x00" * 4
     body = b"AVI " + hdrl + movi
     return b"RIFF" + struct.pack("<I", len(body)) + body + trailing
+
+
+def make_mp3(*, frames: int = 3, id3: bytes | None = None, trailing: bytes = b"") -> bytes:
+    # MPEG-1 layer III, 128 kbps, 44.1 kHz, no padding: 417-byte frames.
+    frame = b"\xff\xfb\x90\x00" + b"\x55" * 413
+    data = b""
+    if id3 is not None:
+        size = len(id3)
+        syncsafe = bytes(((size >> 21) & 0x7F, (size >> 14) & 0x7F, (size >> 7) & 0x7F, size & 0x7F))
+        data += b"ID3\x03\x00\x00" + syncsafe + id3
+    return data + frame * frames + trailing
+
+
+def make_pdf(*, extra_objects: bytes = b"", trailing: bytes = b"") -> bytes:
+    content = b"BT /F1 12 Tf 72 712 Td (Hello /JS world) Tj ET"
+    return (
+        b"%PDF-1.7\n"
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n"
+        b"4 0 obj\n<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream\nendobj\n"
+        + extra_objects
+        + b"trailer\n<< /Root 1 0 R /Info << /Title (A /JavaScript guide) >> >>\n%%EOF\n"
+        + trailing
+    )
+
+
+def make_pdf_object_stream(objects: bytes) -> bytes:
+    body = zlib.compress(objects)
+    return (
+        b"9 0 obj\n<< /Type /ObjStm /N 1 /First 4 /Filter /FlateDecode /Length "
+        + str(len(body)).encode() + b" >>\nstream\n" + body + b"\nendstream\nendobj\n"
+    )

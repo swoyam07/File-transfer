@@ -4,7 +4,7 @@
 ![GUI](https://img.shields.io/badge/GUI-PySide6-41cd52)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
-Offline desktop tool that moves **approved photos and videos** from one PC to another over a direct LAN or Ethernet connection. It needs no cloud, server, database or browser. You run two apps, **Sender** and **Receiver**. Every file is checked on both sides, so a modified sender cannot get anything past the receiver.
+Offline desktop tool that moves **approved photos, videos, MP3s and PDFs** from one PC to another over a direct LAN or Ethernet connection. It needs no cloud, server, database or browser. You run two apps, **Sender** and **Receiver**. Every file is checked on both sides, so a modified sender cannot get anything past the receiver.
 
 ## Contents
 
@@ -22,8 +22,9 @@ Offline desktop tool that moves **approved photos and videos** from one PC to an
 
 - Separate PySide6 **Sender** and **Receiver** desktop apps
 - Direct TCP transfer with mutual pairing-code authentication
-- Real content validation for JPEG, PNG, HEIC, MP4/MOV, MKV and AVI. Renamed or polyglot files are rejected
-- Removes metadata (EXIF, GPS, XMP, video tags) before sending
+- Real content validation for JPEG, PNG, HEIC, MP4/MOV, MKV, AVI, MP3 and PDF. Renamed or polyglot files are rejected
+- PDFs with JavaScript, embedded files, launch actions or encryption are rejected
+- Removes metadata (EXIF, GPS, XMP, video tags, MP3 tags) before sending
 - SHA-256 per file, signed with a per-session key
 - Resumable transfers (`.part` + `.part.json`)
 - Human-readable TOML config and plain log files
@@ -97,7 +98,7 @@ On Windows you can use `scripts\run_receiver.bat` and `scripts\run_sender.bat` i
 
 ## Security model
 
-Only images (`.jpg .jpeg .png .heic`) and videos (`.mp4 .mov .mkv .avi`, optionally `.m4v .webm`) are transferred. Every check runs on the sender **and again on the receiver**.
+Only images (`.jpg .jpeg .png .heic`), videos (`.mp4 .mov .mkv .avi`, optionally `.m4v .webm`), audio (`.mp3`) and documents (`.pdf`) are transferred. Remove a type from `[allowed_extensions]` in `config.toml` to stop sending it. Every check runs on the sender **and again on the receiver**.
 
 | Threat | Protection |
 | --- | --- |
@@ -106,9 +107,13 @@ Only images (`.jpg .jpeg .png .heic`) and videos (`.mp4 .mov .mkv .avi`, optiona
 | Malware appended after an image or video (polyglot) | Data after the end of the container is rejected / removed |
 | Scripts hidden inside a file (`<script>`, PHP, PowerShell, EXE stub) | Whole file is scanned; any hit rejects the file |
 | Files attached inside MKV videos | Rejected (sender drops them when ffmpeg is available) |
+| PDF that runs code or opens things (JavaScript, launch/submit actions, embedded files, multimedia, encryption) | Rejected, including when hidden in compressed object streams or written as `/J#61vaScript` |
+| Title, artist, cover art in MP3s | ID3/APE tags removed on both sides |
 | EXIF / GPS / XMP / comments in photos | Removed on both sides (rotation flag kept) |
+| Author / title in PDFs | **Not removed.** Check PDFs before sending if this matters |
 | Video title, location, device info, GPS tracks | Removed on the sender with ffmpeg (no re-encoding) |
-| Another device on the LAN pushing files | Pairing code (HMAC challenge, never sent over the wire); 5 wrong codes = 5-minute lockout |
+| Another device on the LAN pushing files | Pairing code of 12+ characters (HMAC challenge, never sent over the wire); 5 wrong codes from one address, or 15 from all addresses together, = 5-minute lockout |
+| Received file opened or run by mistake | Never executable on Linux/macOS; tagged "from another computer" (Mark of the Web) on Windows so Defender/SmartScreen check it |
 | Connections from outside the LAN | Receiver accepts only private / link-local peers; sender refuses public targets |
 | Data altered in transit | SHA-256 per file, signed with a per-session key |
 | Path tricks (`../`, `C:`, `file.jpg:stream`, `CON`) | Rejected before anything is written |

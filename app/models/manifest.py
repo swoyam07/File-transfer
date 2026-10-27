@@ -103,6 +103,8 @@ class ScanResult:
     source_root: str
     images: list[FileManifestEntry] = field(default_factory=list)
     videos: list[FileManifestEntry] = field(default_factory=list)
+    audio: list[FileManifestEntry] = field(default_factory=list)
+    documents: list[FileManifestEntry] = field(default_factory=list)
     skipped: list[ScanIssue] = field(default_factory=list)
     warnings: list[ScanIssue] = field(default_factory=list)
 
@@ -111,6 +113,10 @@ class ScanResult:
             return self.images
         if category == "videos":
             return self.videos
+        if category == "audio":
+            return self.audio
+        if category == "documents":
+            return self.documents
         return []
 
     def category_count(self, category: str) -> int:

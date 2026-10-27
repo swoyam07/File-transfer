@@ -42,7 +42,7 @@ class ReceiverMainWindow(QMainWindow):
         self.port_input = QLineEdit(str(config.network.port))
         self.pairing_input = QLineEdit(config.security.pairing_code)
         self.pairing_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pairing_input.setPlaceholderText("Same code as on the sender (min. 8 characters)")
+        self.pairing_input.setPlaceholderText("Same code as on the sender (min. 12 characters)")
         self.status_label = QLabel("Stopped")
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)

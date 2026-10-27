@@ -17,7 +17,7 @@ from app.security import auth
 from app.security.network_policy import resolve_lan_address
 from app.transfer.chunk_io import iter_file_chunks
 from app.validation.extension_policy import ExtensionPolicy
-from app.validation.media_inspector import sanitize_image_bytes
+from app.validation.media_inspector import sanitize_image_bytes, sanitize_mp3
 from app.validation.signature_policy import SignaturePolicy
 from app.validation.video_sanitizer import find_ffmpeg, strip_video_metadata
 
@@ -171,6 +171,11 @@ class SenderService:
                 return resolved  # HEIC: validated, but no sanitizer
             staged = staging_dir / f"image{entry.extension}"
             staged.write_bytes(cleaned)
+            return staged
+
+        if category == "audio" and self.strip_image_metadata:
+            staged = staging_dir / f"audio{entry.extension}"
+            staged.write_bytes(sanitize_mp3(resolved.read_bytes()))
             return staged
 
         if category == "videos" and self.strip_video_metadata:

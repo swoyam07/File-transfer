@@ -69,7 +69,7 @@ pip install -r requirements.txt
 
 ### Step 4. Choose a pairing code
 
-Pick one secret code, **at least 8 characters**, for example `blue-river-2026`. Both computers must use exactly the same code. Without it, the computers refuse to connect to each other.
+Pick one secret code, **at least 12 characters**, for example `blue-river-tiger-2026`. Both computers must use exactly the same code. Without it, the computers refuse to connect to each other.
 
 Don't use a code you use anywhere else.
 

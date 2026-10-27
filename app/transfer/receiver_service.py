@@ -23,7 +23,7 @@ from app.transfer.duplicate_policy import resolve_duplicate_path
 from app.utils.time_utils import utc_now_iso
 from app.validation.content_scanner import ContentScanner
 from app.validation.extension_policy import ExtensionPolicy
-from app.validation.media_inspector import MediaInspector, sanitize_image_bytes
+from app.validation.media_inspector import MediaInspector, sanitize_image_bytes, sanitize_mp3
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,8 @@ _HANDSHAKE_TIMEOUT_SECONDS = 15.0
 _MIN_CHUNK_SIZE = 4096
 _DISK_SPACE_MARGIN = 256 * 1024 * 1024
 _MAX_AUTH_FAILURES = 5
+# Wrong codes from all addresses together, so switching IP does not help guessing.
+_MAX_TOTAL_AUTH_FAILURES = 15
 _AUTH_LOCKOUT_SECONDS = 300.0
 _DEFAULT_MAX_FILE_SIZE = 1024 ** 4
 
@@ -161,10 +163,13 @@ class ReceiverService:
     # ------------------------------------------------------------- handshake
 
     def _is_locked_out(self, peer_ip: str) -> bool:
-        failures, last = self._auth_failures.get(peer_ip, (0, 0.0))
-        if failures >= _MAX_AUTH_FAILURES and time.monotonic() - last < _AUTH_LOCKOUT_SECONDS:
+        now = time.monotonic()
+        recent = {ip: entry for ip, entry in self._auth_failures.items() if now - entry[1] < _AUTH_LOCKOUT_SECONDS}
+        self._auth_failures = recent
+        if sum(failures for failures, _ in recent.values()) >= _MAX_TOTAL_AUTH_FAILURES:
             return True
-        return False
+        failures, _ = recent.get(peer_ip, (0, 0.0))
+        return failures >= _MAX_AUTH_FAILURES
 
     def _record_auth_failure(self, peer_ip: str) -> None:
         failures, last = self._auth_failures.get(peer_ip, (0, 0.0))
@@ -392,6 +397,7 @@ class ReceiverService:
         if decision.action == "replace" and target_path.exists():
             target_path.unlink()
         part_path.replace(target_path)
+        _mark_untrusted(target_path)
         self.resume_store.delete(state_path)
         transport.send_json_message({"type": "FILE_RESULT", "ok": True, "sha256": actual_sha256})
         self._event(f"Received {relative_path} ({size} bytes)")
@@ -419,3 +425,20 @@ class ReceiverService:
             cleaned = sanitize_image_bytes(part_path.read_bytes())
             if cleaned is not None:
                 part_path.write_bytes(cleaned)
+        if result.category == "audio" and self.strip_image_metadata:
+            part_path.write_bytes(sanitize_mp3(part_path.read_bytes()))
+
+
+def _mark_untrusted(path: Path) -> None:
+    """Make a received file harmless to double-click by mistake: never
+    executable on Linux/macOS, and tagged "downloaded from another computer"
+    (Mark of the Web) on Windows so Defender and SmartScreen treat it that way."""
+    try:
+        if os.name == "nt":
+            with open(f"{path}:Zone.Identifier", "w", encoding="ascii") as stream:
+                stream.write("[ZoneTransfer]\r\nZoneId=3\r\n")
+        else:
+            path.chmod(0o644)
+    except OSError:
+        # Not every file system supports these (e.g. FAT32/exFAT USB drives).
+        logger.warning("could_not_mark_received_file", extra={"path": str(path)})

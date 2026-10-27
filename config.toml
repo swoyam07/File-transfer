@@ -57,6 +57,15 @@ values = [".jpg", ".jpeg", ".png", ".heic"]
 # Supported: .mp4 .m4v .mov .mkv .webm .avi
 values = [".mp4", ".mkv", ".avi", ".mov"]
 
+[allowed_extensions.audio]
+# Supported: .mp3 (ID3/APE tags such as title, artist and cover art are removed)
+values = [".mp3"]
+
+[allowed_extensions.documents]
+# Supported: .pdf. PDFs with JavaScript, embedded files, launch/submit actions,
+# multimedia or encryption are rejected. PDF metadata (author, title) is kept.
+values = [".pdf"]
+
 [blocked_extensions]
 values = [
   # Executables & system files
@@ -70,11 +79,9 @@ values = [
   # Package installers
   ".app", ".dmg", ".deb", ".rpm", ".apk",
   # Audio (not needed)
-  ".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".wma",
+  ".m4a", ".wav", ".flac", ".aac", ".ogg", ".wma",
   # Other media you don't need
   ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".ico",
-  # Documents that can carry scripts
-  ".pdf",
   # Documents you don't need
   ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
   # Config/data files

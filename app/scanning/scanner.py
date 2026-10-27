@@ -60,10 +60,7 @@ class FileScanner:
             if signature_result.warnings:
                 result.warnings.append(ScanIssue(path=path, reason=";".join(signature_result.warnings)))
 
-            if category == "images":
-                result.images.append(entry)
-            elif category == "videos":
-                result.videos.append(entry)
+            result.category_entries(category).append(entry)
 
         return result
 

@@ -15,6 +15,7 @@ rejected rather than allowed.
 
 from __future__ import annotations
 
+import re
 import struct
 import zlib
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ EXTENSION_FORMATS: dict[str, str] = {
     ".mkv": "matroska",
     ".webm": "webm",
     ".avi": "avi",
+    ".mp3": "mp3",
+    ".pdf": "pdf",
 }
 
 FORMAT_CATEGORIES: dict[str, str] = {
@@ -46,12 +49,16 @@ FORMAT_CATEGORIES: dict[str, str] = {
     "matroska": "videos",
     "webm": "videos",
     "avi": "videos",
+    "mp3": "audio",
+    "pdf": "documents",
 }
 
 SUPPORTED_EXTENSIONS = frozenset(EXTENSION_FORMATS)
 
-# Images are loaded into memory to be parsed and rewritten.
+# Images, audio and documents are loaded into memory to be parsed and rewritten.
 MAX_IMAGE_BYTES = 256 * 1024 * 1024
+MAX_AUDIO_BYTES = 512 * 1024 * 1024
+MAX_DOCUMENT_BYTES = 256 * 1024 * 1024
 
 _HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1", b"avif"}
 
@@ -133,9 +140,9 @@ class MediaInspector:
                 handle.seek(0)
                 warnings = self._validate(detected, handle, size)
 
-            if self._content_scan and FORMAT_CATEGORIES[detected] == "images":
-                # Images are scanned here; videos are scanned while streaming
-                # so multi-GB files are not read an extra time.
+            if self._content_scan and FORMAT_CATEGORIES[detected] != "videos":
+                # Images, audio and documents are scanned here; videos are scanned
+                # while streaming so multi-GB files are not read an extra time.
                 finding = ContentScanner.scan_file(path)
                 if finding:
                     raise MediaRejected(f"suspicious_content:{finding}")
@@ -185,6 +192,23 @@ class MediaInspector:
         if fmt == "avi":
             _validate_avi(handle, size)
             return []
+        if fmt == "mp3":
+            if size > MAX_AUDIO_BYTES:
+                raise MediaRejected("audio_too_large")
+            parsed_audio = parse_mp3(handle.read())
+            warnings = []
+            if parsed_audio.trailing:
+                if self._strict:
+                    raise MediaRejected("trailing_data_after_audio")
+                warnings.append("trailing_data_removed")
+            if parsed_audio.has_metadata:
+                warnings.append("metadata_removed")
+            return warnings
+        if fmt == "pdf":
+            if size > MAX_DOCUMENT_BYTES:
+                raise MediaRejected("document_too_large")
+            validate_pdf(handle.read())
+            return ["pdf_metadata_not_removed"]
         raise MediaRejected("unsupported_format")
 
 
@@ -211,6 +235,10 @@ def detect_format(head: bytes) -> str | None:
         return "matroska"
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"AVI ":
         return "avi"
+    if head.startswith(b"%PDF-"):
+        return "pdf"
+    if head.startswith(b"ID3") or _mp3_frame(head, 0) is not None:
+        return "mp3"
     return None
 
 
@@ -604,3 +632,219 @@ def _validate_avi(handle: BinaryIO, size: int) -> None:
         if end > size + 1:
             raise MediaRejected("avi_truncated")
         pos = end
+
+
+# ----------------------------------------------------------------------------- MP3
+
+# kbps by (MPEG-1 = 3 / MPEG-2 and 2.5 = 2, layer bits: 3 = I, 2 = II, 1 = III)
+_MP3_BITRATES = {
+    (3, 3): (0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448),
+    (3, 2): (0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384),
+    (3, 1): (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320),
+    (2, 3): (0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256),
+    (2, 2): (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160),
+    (2, 1): (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160),
+}
+# Hz by version bits (3 = MPEG-1, 2 = MPEG-2, 0 = MPEG-2.5)
+_MP3_SAMPLE_RATES = {3: (44100, 48000, 32000), 2: (22050, 24000, 16000), 0: (11025, 12000, 8000)}
+
+
+@dataclass(slots=True)
+class _ParsedAudio:
+    start: int  # first audio frame
+    end: int    # end of the last audio frame
+    trailing: bool
+    has_metadata: bool
+
+
+def _mp3_frame(data: bytes, pos: int) -> tuple[tuple[int, int, int], int] | None:
+    """Return ((version, layer, sample rate index), frame length) for a valid
+    MPEG audio frame header at pos, or None."""
+    if pos + 4 > len(data) or data[pos] != 0xFF or data[pos + 1] & 0xE0 != 0xE0:
+        return None
+    version = (data[pos + 1] >> 3) & 3
+    layer = (data[pos + 1] >> 1) & 3
+    bitrate_index = data[pos + 2] >> 4
+    rate_index = (data[pos + 2] >> 2) & 3
+    if version == 1 or layer == 0 or bitrate_index in (0, 15) or rate_index == 3:
+        return None
+    bitrate = _MP3_BITRATES[(3 if version == 3 else 2, layer)][bitrate_index] * 1000
+    sample_rate = _MP3_SAMPLE_RATES[version][rate_index]
+    padding = (data[pos + 2] >> 1) & 1
+    if layer == 3:
+        length = (12 * bitrate // sample_rate + padding) * 4
+    elif layer == 1 and version != 3:
+        length = 72 * bitrate // sample_rate + padding
+    else:
+        length = 144 * bitrate // sample_rate + padding
+    return (version, layer, rate_index), length
+
+
+def parse_mp3(data: bytes) -> _ParsedAudio:
+    size = len(data)
+    pos = 0
+    has_metadata = False
+
+    # ID3v2 tags at the start (title, artist, cover art, ...).
+    while data.startswith(b"ID3", pos):
+        header = data[pos:pos + 10]
+        if len(header) < 10 or any(byte & 0x80 for byte in header[6:10]):
+            raise MediaRejected("mp3_bad_id3_tag")
+        tag_size = (header[6] << 21) | (header[7] << 14) | (header[8] << 7) | header[9]
+        pos += 10 + tag_size + (10 if header[5] & 0x10 else 0)
+        has_metadata = True
+
+    # Tags at the end: ID3v1 (128 bytes), and APEv2 before it.
+    end = size
+    if end - pos >= 128 and data[end - 128:end - 125] == b"TAG":
+        end -= 128
+        has_metadata = True
+    if end - pos >= 32 and data[end - 32:end - 24] == b"APETAGEX":
+        tag_size, _, flags = struct.unpack("<III", data[end - 20:end - 8])
+        tag_size += 32 if flags & 0x80000000 else 0  # header present
+        if tag_size > end - pos:
+            raise MediaRejected("mp3_bad_ape_tag")
+        end -= tag_size
+        has_metadata = True
+
+    first = _mp3_frame(data, pos)
+    if pos >= end or first is None:
+        raise MediaRejected("mp3_no_audio_frames")
+    stream_kind = first[0]
+    start = pos
+
+    # Every byte up to the end tags must belong to a chain of frames of the
+    # same kind; anything else is data hidden in the file.
+    while pos < end:
+        frame = _mp3_frame(data, pos)
+        if frame is None or frame[0] != stream_kind:
+            break
+        pos = min(pos + frame[1], end)  # encoders often cut the last frame short
+    return _ParsedAudio(start=start, end=pos, trailing=pos < end, has_metadata=has_metadata)
+
+
+def sanitize_mp3(data: bytes) -> bytes:
+    """Keep only the audio frames: drops ID3/APE tags and trailing data."""
+    parsed = parse_mp3(data)
+    return data[parsed.start:parsed.end]
+
+
+# ----------------------------------------------------------------------------- PDF
+
+# Keys and types that make a PDF do more than show pages: run code, start
+# programs, open or submit to other files, carry files inside it, play media,
+# or encrypt its objects so they cannot be checked.
+_PDF_FORBIDDEN_NAMES = frozenset({
+    b"JavaScript", b"JS", b"Launch", b"EmbeddedFile", b"EmbeddedFiles", b"EF", b"FileAttachment",
+    b"RichMedia", b"RichMediaExecute", b"XFA", b"SubmitForm", b"ImportData", b"GoToR", b"GoToE",
+    b"Rendition", b"Movie", b"Sound", b"3D", b"Encrypt",
+})
+_PDF_DELIMS = rb"\x00\t\n\x0c\r /\[\]<>(){}%"
+_PDF_TOKEN = re.compile(rb"\(|%|<<?|/[^" + _PDF_DELIMS + rb"]*|(?<=[\x00\t\n\x0c\r >])stream(?:\r\n|\n|\r)")
+_PDF_STRING_SPECIAL = re.compile(rb"[()\\]")
+_PDF_EOL = re.compile(rb"\r\n|\n|\r")
+_PDF_NAME_ESCAPE = re.compile(rb"#([0-9A-Fa-f]{2})")
+_PDF_LENGTH = re.compile(rb"/Length[\x00\t\n\x0c\r ]+(\d+)(?!\d|\s+\d+\s+R)")
+_PDF_OBJSTM = re.compile(rb"/Type\s*/ObjStm")
+_PDF_FLATE_ONLY = re.compile(rb"/Filter\s*(?:/FlateDecode|\[\s*/FlateDecode\s*\])")
+# Inflated object streams are kept in memory; this bounds compression bombs.
+_PDF_MAX_INFLATED_BYTES = 256 * 1024 * 1024
+
+
+def _pdf_decode_names(data: bytes) -> bytes:
+    # "/J#61vaScript" is the same name as "/JavaScript".
+    return _PDF_NAME_ESCAPE.sub(lambda match: bytes([int(match.group(1), 16)]), data)
+
+
+def _pdf_skip_string(data: bytes, pos: int) -> int:
+    depth = 0
+    while True:
+        match = _PDF_STRING_SPECIAL.search(data, pos)
+        if match is None:
+            raise MediaRejected("pdf_unterminated_string")
+        char = data[match.start()]
+        pos = match.start() + (2 if char == 0x5C else 1)
+        if char == 0x28:
+            depth += 1
+        elif char == 0x29:
+            depth -= 1
+            if depth == 0:
+                return pos
+
+
+def _pdf_inflate(header: bytes, body: bytes, budget: list[int]) -> bytes:
+    if b"/Filter" not in header:
+        return body
+    if not _PDF_FLATE_ONLY.search(header) or b"/DecodeParms" in header:
+        raise MediaRejected("pdf_object_stream_filter")
+    try:
+        inflated = zlib.decompressobj().decompress(body, budget[0] + 1)
+    except zlib.error as exc:
+        raise MediaRejected("pdf_bad_object_stream") from exc
+    if len(inflated) > budget[0]:
+        raise MediaRejected("pdf_object_streams_too_large")
+    budget[0] -= len(inflated)
+    return inflated
+
+
+def _check_pdf_objects(data: bytes, budget: list[int], *, allow_streams: bool) -> None:
+    """Tokenize the object syntax and reject forbidden names. Literal strings,
+    hex strings and comments are skipped, so their text is never mistaken for
+    a key. Stream data (page content, images, fonts) cannot hold dictionaries
+    and is skipped, except compressed object streams, which are unpacked."""
+    pos = 0
+    region_start = 0
+    size = len(data)
+    while True:
+        match = _PDF_TOKEN.search(data, pos)
+        if match is None:
+            return
+        token = match.group()
+        if token == b"(":
+            pos = _pdf_skip_string(data, match.start())
+        elif token == b"%":
+            eol = _PDF_EOL.search(data, match.end())
+            pos = eol.end() if eol else size
+        elif token == b"<":
+            close = data.find(b">", match.end())
+            if close < 0:
+                raise MediaRejected("pdf_unterminated_string")
+            pos = close + 1
+        elif token == b"<<":
+            pos = match.end()
+        elif token.startswith(b"/"):
+            name = _pdf_decode_names(token[1:])
+            if name in _PDF_FORBIDDEN_NAMES:
+                raise MediaRejected(f"pdf_active_content:{name.decode('latin-1')}")
+            pos = match.end()
+        else:  # stream keyword
+            if not allow_streams:
+                raise MediaRejected("pdf_bad_object_stream")
+            header_start = max(data.rfind(b"obj", region_start, match.start()), region_start)
+            header = _pdf_decode_names(data[header_start:match.start()])
+            body_start = match.end()
+            end = -1
+            length = _PDF_LENGTH.search(header)
+            if length:
+                candidate = body_start + int(length.group(1))
+                if data[candidate:candidate + 12].lstrip(b"\r\n").startswith(b"endstream"):
+                    end = candidate
+            if end < 0:
+                end = data.find(b"endstream", body_start)
+                if end < 0:
+                    raise MediaRejected("pdf_stream_unterminated")
+            if _PDF_OBJSTM.search(header):
+                inflated = _pdf_inflate(header, data[body_start:end], budget)
+                _check_pdf_objects(inflated, budget, allow_streams=False)
+            pos = region_start = data.find(b"endstream", end) + len(b"endstream")
+
+
+def validate_pdf(data: bytes) -> None:
+    if not data.startswith((b"%PDF-1.", b"%PDF-2.")):
+        raise MediaRejected("pdf_bad_header")
+    eof = data.rfind(b"%%EOF")
+    if eof < 0:
+        raise MediaRejected("pdf_missing_eof")
+    if data[eof + 5:].strip(b"\x00\t\n\x0c\r "):
+        raise MediaRejected("trailing_data_after_document")
+    _check_pdf_objects(data, [_PDF_MAX_INFLATED_BYTES], allow_streams=True)

@@ -61,6 +61,15 @@ values = [".jpg", ".jpeg", ".png", ".heic"]
 # Supported: .mp4 .m4v .mov .mkv .webm .avi
 values = [".mp4", ".mkv", ".avi", ".mov"]
 
+[allowed_extensions.audio]
+# Supported: .mp3 (ID3/APE tags such as title, artist and cover art are removed)
+values = [".mp3"]
+
+[allowed_extensions.documents]
+# Supported: .pdf. PDFs with JavaScript, embedded files, launch/submit actions,
+# multimedia or encryption are rejected. PDF metadata (author, title) is kept.
+values = [".pdf"]
+
 [blocked_extensions]
 # SECURITY: Comprehensive blocking of potentially dangerous file types
 # Executables, scripts, archives, and system files are blocked by default
@@ -76,7 +85,7 @@ values = [
   # Other potentially dangerous formats
   ".app", ".dmg", ".deb", ".rpm", ".apk", ".inf", ".reg",
   # Documents and web files that can carry scripts
-  ".pdf", ".svg", ".html", ".htm", ".hta"
+  ".svg", ".html", ".htm", ".hta"
 ]
 
 [logging]
@@ -87,7 +96,7 @@ backup_count = 10
 level = "INFO"
 
 [security]
-# Both computers must use the same pairing code (at least 8 characters).
+# Both computers must use the same pairing code (at least 12 characters).
 # Leave empty to type it in the app window each time.
 pairing_code = ""
 # The receiver only accepts senders from these address ranges (LAN only).

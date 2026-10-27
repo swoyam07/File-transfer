@@ -25,3 +25,6 @@ state/
 .idea/
 .DS_Store
 Thumbs.db
+
+# graphify knowledge graph (local)
+graphify-out/

@@ -81,13 +81,23 @@ DEFAULT_ALLOWED_VIDEO_EXTENSIONS = {
     ".mp4", ".mkv", ".mov", ".avi",
 }
 
+DEFAULT_ALLOWED_AUDIO_EXTENSIONS = {
+    ".mp3",
+}
+
+# PDFs are only accepted without JavaScript, embedded files, launch actions
+# or encryption (see validate_pdf in media_inspector.py).
+DEFAULT_ALLOWED_DOCUMENT_EXTENSIONS = {
+    ".pdf",
+}
+
 DEFAULT_BLOCKED_EXTENSIONS = {
     ".exe", ".msi", ".dll", ".sys", ".bat", ".cmd", ".com",
     ".ps1", ".py", ".js", ".vbs", ".sh", ".jar",
     ".lnk", ".url",
     ".zip", ".rar", ".7z", ".iso", ".tar", ".gz",
     ".scr", ".pif", ".hta", ".cpl", ".msc", ".wsf", ".wsh", ".jse", ".vbe",
-    ".svg", ".html", ".htm", ".pdf",
+    ".svg", ".html", ".htm",
 }
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
