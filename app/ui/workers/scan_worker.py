@@ -14,6 +14,7 @@ class ScanWorker(QObject):
     finished = Signal(object)
     failed = Signal(str)
     progress = Signal(str)
+    scan_progress = Signal(int, int)  # done, total
 
     def __init__(
         self,
@@ -25,6 +26,7 @@ class ScanWorker(QObject):
         self.source_root = source_root
         self.extension_policy = extension_policy
         self.rejected = rejected
+        self._last_percent: int | None = None
 
     @Slot()
     def run(self) -> None:
@@ -34,7 +36,11 @@ class ScanWorker(QObject):
                 extension_policy=self.extension_policy,
                 signature_policy=SignaturePolicy(self.extension_policy, enabled=True),
             )
-            result = scanner.scan(Path(self.source_root), exclude=self.rejected.folder if self.rejected else None)
+            result = scanner.scan(
+                Path(self.source_root),
+                exclude=self.rejected.folder if self.rejected else None,
+                on_progress=self._report_progress,
+            )
             if self.rejected is not None:
                 move_rejected(self.rejected, [
                     (Path(issue.path).relative_to(result.source_root).as_posix(), issue.reason)
@@ -45,6 +51,13 @@ class ScanWorker(QObject):
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+    def _report_progress(self, done: int, total: int) -> None:
+        # One signal per whole percent, so a big folder does not flood the GUI thread.
+        percent = done * 100 // total if total else 100
+        if percent != self._last_percent:
+            self._last_percent = percent
+            self.scan_progress.emit(done, total)
 
 
 def move_rejected(rejected: RejectedFiles, files: list[tuple[str, str]], report) -> None:

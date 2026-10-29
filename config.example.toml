@@ -21,8 +21,8 @@ heartbeat_interval_seconds = 10
 idle_disconnect_seconds = 90
 
 [transfer]
-# 4MB chunks (4194304 bytes) for optimal balance between speed and safety
-chunk_size_bytes = 4194304
+# 16MB chunks (16777216 bytes). Only a maximum: smaller files go in one piece.
+chunk_size_bytes = 16777216
 resume_enabled = true
 max_retries = 3
 max_file_count = 10000

@@ -26,3 +26,18 @@ def test_scanner_collects_allowed_files_without_signature_check(tmp_path: Path) 
     assert len(result.skipped) == 2
     assert result.images[0].relative_path == "photos/one.jpg"
     assert result.videos[0].relative_path == "videos/clip.mp4"
+
+def test_scanner_reports_progress_up_to_the_total(tmp_path: Path) -> None:
+    (tmp_path / "photos").mkdir()
+    for name in ("a.jpg", "b.jpg", "c.txt"):
+        (tmp_path / "photos" / name).write_bytes(b"x")
+    calls: list[tuple[int, int]] = []
+
+    scanner = FileScanner(
+        extension_policy=ExtensionPolicy(),
+        signature_policy=SignaturePolicy(ExtensionPolicy(), enabled=False),
+    )
+    scanner.scan(tmp_path, on_progress=lambda done, total: calls.append((done, total)))
+
+    # 4 paths: the folder and its 3 files.
+    assert calls == [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)]

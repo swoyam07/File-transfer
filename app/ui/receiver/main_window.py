@@ -4,13 +4,13 @@ from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from app.models.transfer import AppConfig
 from app.security.auth import AuthError, validate_pairing_code
 from app.ui.dialogs.settings_dialog import SettingsDialog
+from app.ui.style import make_header, make_log_view, make_primary, make_status_label, set_status
 from app.ui.workers.receive_worker import ReceiveWorker
 from app.validation.extension_policy import ExtensionPolicy
 
@@ -28,7 +29,7 @@ class ReceiverMainWindow(QMainWindow):
         self.config = config
         self.extension_policy = ExtensionPolicy.from_config(config.allowed_extensions, config.blocked_extensions)
         self.setWindowTitle("Safe Media Transfer - Receiver")
-        self.resize(760, 480)
+        self.resize(780, 600)
 
         self._receive_thread: QThread | None = None
         self._receive_worker: ReceiveWorker | None = None
@@ -40,37 +41,56 @@ class ReceiverMainWindow(QMainWindow):
         self.bind_ip_input = QLineEdit(config.network.bind_ip)
         self.bind_ip_input.setToolTip("Use this computer's LAN IP address, e.g. 192.168.50.2")
         self.port_input = QLineEdit(str(config.network.port))
+        self.port_input.setMaximumWidth(90)
         self.pairing_input = QLineEdit(config.security.pairing_code)
         self.pairing_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.pairing_input.setPlaceholderText("Same code as on the sender (min. 12 characters)")
-        self.status_label = QLabel("Stopped")
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
+        self.status_label = make_status_label("Stopped")
+        self.log_output = make_log_view()
 
-        self.browse_button = QPushButton("Browse")
-        self.start_button = QPushButton("Start Listener")
+        self.browse_button = QPushButton("Browse...")
+        self.start_button = make_primary(QPushButton("Start Listener"))
         self.stop_button = QPushButton("Stop Listener")
+        self.stop_button.setEnabled(False)
         self.settings_button = QPushButton("Settings")
 
+        destination_row = QHBoxLayout()
+        destination_row.addWidget(self.destination_input)
+        destination_row.addWidget(self.browse_button)
+        listen_row = QHBoxLayout()
+        listen_row.addWidget(self.bind_ip_input)
+        listen_row.addWidget(QLabel("Port"))
+        listen_row.addWidget(self.port_input)
+
         form = QFormLayout()
-        form.addRow("Destination Root", self.destination_input)
-        form.addRow("Bind IP", self.bind_ip_input)
-        form.addRow("Port", self.port_input)
+        form.addRow("Destination Root", destination_row)
+        form.addRow("Bind IP", listen_row)
         form.addRow("Pairing Code", self.pairing_input)
 
         button_row = QHBoxLayout()
-        button_row.addWidget(self.browse_button)
         button_row.addWidget(self.start_button)
         button_row.addWidget(self.stop_button)
-        button_row.addWidget(self.settings_button)
+        button_row.addStretch()
+        button_row.addWidget(self.status_label)
+
+        listener_box = QGroupBox("Listener")
+        listener_layout = QVBoxLayout()
+        listener_layout.addLayout(form)
+        listener_layout.addLayout(button_row)
+        listener_box.setLayout(listener_layout)
+
+        log_box = QGroupBox("Log")
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(self.log_output)
+        log_box.setLayout(log_layout)
 
         layout = QVBoxLayout()
-        layout.addLayout(form)
-        layout.addLayout(button_row)
-        layout.addWidget(QLabel("Status"))
-        layout.addWidget(self.status_label)
-        layout.addWidget(QLabel("Logs"))
-        layout.addWidget(self.log_output)
+        layout.setContentsMargins(16, 12, 16, 16)
+        layout.addLayout(make_header(
+            "Safe Media Transfer", "Receiver: every file is checked again before it is saved", self.settings_button
+        ))
+        layout.addWidget(listener_box)
+        layout.addWidget(log_box, 1)
 
         central.setLayout(layout)
 
@@ -120,6 +140,8 @@ class ReceiverMainWindow(QMainWindow):
         self._receive_worker.event.connect(self._append_log)
 
         self._receive_thread.start()
+        self._set_running(True)
+        set_status(self.status_label, "Starting...", "busy")
         self._append_log("Starting listener...")
 
     def _stop_listener(self) -> None:
@@ -132,13 +154,18 @@ class ReceiverMainWindow(QMainWindow):
             self._receive_thread.deleteLater()
             self._receive_thread = None
             self._receive_worker = None
+        self._set_running(False)
+
+    def _set_running(self, running: bool) -> None:
+        self.start_button.setEnabled(not running)
+        self.stop_button.setEnabled(running)
 
     def _listener_started(self) -> None:
-        self.status_label.setText("Listening")
+        set_status(self.status_label, "Listening", "ok")
         self._append_log("Receiver is listening.")
 
     def _listener_stopped(self) -> None:
-        self.status_label.setText("Stopped")
+        set_status(self.status_label, "Stopped", "idle")
         self._append_log("Receiver stopped.")
 
     def _worker_failed(self, message: str) -> None:
@@ -148,7 +175,8 @@ class ReceiverMainWindow(QMainWindow):
             self._receive_thread.deleteLater()
             self._receive_thread = None
             self._receive_worker = None
-        self.status_label.setText("Error")
+        self._set_running(False)
+        set_status(self.status_label, "Error", "error")
         self._append_log(f"Error: {message}")
         QMessageBox.critical(self, "Receiver error", message)
 

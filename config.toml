@@ -1,17 +1,18 @@
 [app]
 name = "Safe Media Transfer"
-mode = "sender"  # Change to "sender" when running sender
+mode = "sender"  # "sender" or "receiver"
 protocol_version = 1
 debug_logging = false
 theme = "system"
+# Set to true only for debugging purposes on isolated networks
 allow_remote_connections = false
 
 [network]
-# RECEIVER: Use 0.0.0.0 to accept connections from any IP on LAN
-# SENDER: Use 127.0.0.1 for local-only or change to the receiver's IP
-bind_ip = "127.0.0.1" 
-# SENDER: Set this to the receiver's IP address
-receiver_ip = "192.168.50.2"  
+# SECURITY: Use 127.0.0.1 for local-only transfers (secure)
+# For LAN transfers, use 0.0.0.0 or specific LAN IP
+bind_ip = "127.0.0.1"
+# SENDER: the receiver computer's LAN IP address
+receiver_ip = "192.168.50.2"
 port = 5001
 connect_timeout_seconds = 10
 read_timeout_seconds = 30
@@ -20,24 +21,24 @@ heartbeat_interval_seconds = 10
 idle_disconnect_seconds = 90
 
 [transfer]
-chunk_size_bytes = 4194304  # 4MB chunks
+# 16MB chunks (16777216 bytes). Only a maximum: smaller files go in one piece.
+chunk_size_bytes = 16777216
 resume_enabled = true
 max_retries = 3
 max_file_count = 10000
-max_file_size_bytes = 1099511627776  # 1TB
+# 1TB max file size (1099511627776 bytes)
+max_file_size_bytes = 1099511627776
 max_manifest_bytes = 33554432
-duplicate_policy = "skip_identical"  # skip_identical, rename_incoming, replace, fail
+# skip_identical = keep existing, rename_incoming = save as "name (1)", replace = overwrite, fail = skip with error
+duplicate_policy = "replace"
 # SENDER: move files that fail the checks (corrupted, wrong format, unsafe)
 # out of the source folder into rejected_folder, with reasons.csv saying why.
 # They are moved as they are: not repaired and not sent.
 move_rejected_files = true
 
 [storage]
-# RECEIVER: Where to save received files
-default_destination = "~/SafeMediaInbox"
-log_folder = "logs"
-report_folder = "reports"
-state_folder = "state"
+# Change this to your preferred location
+default_destination = "C:\\SafeMediaTransfer\\Inbox"
 staging_suffix = ".part"
 state_suffix = ".part.json"
 # SENDER: folder for the metadata-free copy of each file before it is sent.
@@ -47,9 +48,12 @@ sender_temp_folder = ""
 # SENDER: where rejected files are moved. Empty = next to the source folder,
 # e.g. D:\Media -> D:\Media_rejected. Subfolders are kept.
 rejected_folder = ""
+report_folder = "reports"
+state_folder = "state"
+log_folder = "logs"
 
 [verification]
-# SECURITY: Always enabled for integrity checking
+# SECURITY: SHA256 integrity verification (essential for malware safety)
 sha256_enabled = true
 signature_validation_enabled = true
 
@@ -78,38 +82,32 @@ values = [".mp3"]
 values = [".pdf"]
 
 [blocked_extensions]
+# SECURITY: Comprehensive blocking of potentially dangerous file types
+# Executables, scripts, archives, and system files are blocked by default
 values = [
-  # Executables & system files
-  ".exe", ".msi", ".dll", ".sys", ".bat", ".cmd", ".com", ".scr", ".inf", ".reg",
-  # Scripts
-  ".ps1", ".py", ".pyw", ".pyc", ".js", ".vbs", ".sh", ".bash", ".jar", ".rb", ".pl",
+  # Windows executables and installers
+  ".exe", ".msi", ".dll", ".sys", ".bat", ".cmd", ".com",
+  # Scripts and interpreters
+  ".ps1", ".py", ".js", ".vbs", ".sh", ".bash", ".jar", ".pyw", ".pyc",
   # Shortcuts
-  ".lnk", ".url",
-  # Archives
-  ".zip", ".rar", ".7z", ".iso", ".tar", ".gz", ".bz2", ".xz", ".cab",
-  # Package installers
-  ".app", ".dmg", ".deb", ".rpm", ".apk",
-  # Audio (not needed)
-  ".m4a", ".wav", ".flac", ".aac", ".ogg", ".wma",
-  # Other media you don't need
-  ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".ico",
-  # Documents you don't need
-  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
-  # Config/data files
-  ".ini", ".cfg", ".xml", ".json", ".toml", ".yaml", ".yml", ".log",
-  # Web files
-  ".html", ".htm", ".css", ".php",
-  # Database
-  ".db", ".sqlite", ".sql"
+  ".lnk", ".url", ".scr",
+  # Archives (can hide malware)
+  ".zip", ".rar", ".7z", ".iso", ".tar", ".gz", ".bz2", ".xz",
+  # Other potentially dangerous formats
+  ".app", ".dmg", ".deb", ".rpm", ".apk", ".inf", ".reg",
+  # Documents and web files that can carry scripts
+  ".svg", ".html", ".htm", ".hta"
 ]
 
 [logging]
-level = "INFO"
+# Max log file size (5MB before rotation)
 max_bytes = 5242880
 backup_count = 10
+# DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = "INFO"
 
 [security]
-# Both computers must use the same pairing code (at least 8 characters).
+# Both computers must use the same pairing code (at least 12 characters).
 # Leave empty to type it in the app window each time.
 pairing_code = ""
 # The receiver only accepts senders from these address ranges (LAN only).

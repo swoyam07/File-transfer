@@ -106,7 +106,7 @@ With hard drives on both PCs (~100 MB/s) and a 1 Gbps cable (~115 MB/s), the dri
 4. **The receiver's port is open in its firewall:**
    - Fedora: `sudo firewall-cmd --add-port=5001/tcp`. This lasts until reboot.
    - Windows: allow the app when Windows asks, or add an inbound rule for TCP port 5001.
-5. Use **Transfer All** for everything at once, or **Transfer Heavy Video** for a folder of long movies.
+5. Use **Transfer All** for everything at once. Every button handles large files (1 GB+) the same way.
 
 The sender cleans the next file while the current one is being sent, so the source drive, cable and destination drive work at the same time. If the transfer stops, run it again with the same folders. With `duplicate_policy = "skip_identical"` on the receiver, finished files are skipped and the interrupted file continues where it left off. With `replace`, everything is sent again.
 
@@ -192,5 +192,5 @@ scripts/          # Windows run/build helpers
 - [INSTALL.md](INSTALL.md): what to install on Linux and Windows, step by step
 - [QUICKSTART.md](QUICKSTART.md): fastest way to get running
 - [SETUP_SENDER.md](SETUP_SENDER.md) and [SETUP_RECEIVER.md](SETUP_RECEIVER.md): step-by-step setup for each computer, with what to type in each window
-- [SETUP_GUIDE.md](SETUP_GUIDE.md) and [SETUP_SENDER_RECEIVER.md](SETUP_SENDER_RECEIVER.md): older combined setup guides
+- [SETUP_GUIDE.md](SETUP_GUIDE.md): older combined setup guide
 - [SECURITY.md](SECURITY.md): security design

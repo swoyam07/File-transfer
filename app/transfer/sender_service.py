@@ -25,8 +25,7 @@ from app.validation.video_sanitizer import find_ffmpeg, strip_video_metadata
 
 logger = logging.getLogger(__name__)
 
-_CHUNK_SIZE = 4 * 1024 * 1024
-_HEAVY_CHUNK_SIZE = 16 * 1024 * 1024
+_CHUNK_SIZE = 16 * 1024 * 1024
 _READ_TIMEOUT_SECONDS = 120.0
 # The receiver re-hashes and validates the whole file after the last chunk,
 # which can take a while for very large videos.
@@ -58,7 +57,6 @@ class SenderService:
         receiver_port: int,
         pairing_code: str,
         chunk_size: int = _CHUNK_SIZE,
-        heavy_mode: bool = False,
         strip_image_metadata: bool = True,
         strip_video_metadata: bool = True,
         allow_remote: bool = False,
@@ -66,11 +64,11 @@ class SenderService:
         connect_timeout: float = 10.0,
         temp_folder: Path | None = None,
         progress: Callable[[str], None] | None = None,
+        file_progress: Callable[[int, int, int], None] | None = None,
     ) -> None:
         self.receiver_host = receiver_host
         self.receiver_port = receiver_port
-        self.heavy_mode = heavy_mode
-        self.chunk_size = _HEAVY_CHUNK_SIZE if heavy_mode else chunk_size
+        self.chunk_size = chunk_size
         self.strip_image_metadata = strip_image_metadata
         self.strip_video_metadata = strip_video_metadata
         self.allow_remote = allow_remote
@@ -81,6 +79,8 @@ class SenderService:
         self._signature_policy = SignaturePolicy(self._extension_policy, enabled=True, strict=False)
         self._ffmpeg = find_ffmpeg() if strip_video_metadata else None
         self._progress = progress or (lambda message: None)
+        # file_progress(file_number, bytes_done, file_size), file_number counting from 1.
+        self._file_progress = file_progress or (lambda number, done, size: None)
 
     def send_manifest(self, manifest: TransferManifest, source_root: Path) -> list[FileSendResult]:
         source_root = source_root.resolve()
@@ -118,10 +118,14 @@ class SenderService:
                     prepared = upcoming.result()
                     upcoming = pool.submit(self._prepare, source_root, files[index]) if index < total else None
                     self._progress(f"[{index}/{total}] {entry.relative_path}")
+                    self._file_progress(index, 0, 1)
                     try:
-                        result = self._send_prepared(transport, session, prepared)
+                        result = self._send_prepared(
+                            transport, session, prepared, lambda done, size, number=index: self._file_progress(number, done, size)
+                        )
                     finally:
                         _remove_staging(prepared)
+                    self._file_progress(index, 1, 1)
                     results.append(result)
                     if result.status != "sent":
                         self._progress(f"    {result.status}: {result.reason}")
@@ -187,13 +191,19 @@ class SenderService:
                 continue
         raise ValueError(f"not_enough_temp_space: needs {size + _TEMP_SPACE_MARGIN} bytes free in {candidates[0]}")
 
-    def _send_prepared(self, transport: SocketTransport, session: bytes, prepared: _PreparedFile) -> FileSendResult:
+    def _send_prepared(
+        self,
+        transport: SocketTransport,
+        session: bytes,
+        prepared: _PreparedFile,
+        report: Callable[[int, int], None],
+    ) -> FileSendResult:
         entry = prepared.entry
         if prepared.send_path is None:
             logger.warning("file_not_sent", extra={"path": entry.relative_path, "reason": prepared.error})
             transport.send_json_message({"type": "FILE_CANCEL", "relative_path": entry.relative_path})
             return FileSendResult(entry.relative_path, "rejected", f"sender: {prepared.error}")
-        return self._stream_file(transport, session, entry, prepared.send_path)
+        return self._stream_file(transport, session, entry, prepared.send_path, report)
 
     def _prepare_file(self, source_root: Path, entry: FileManifestEntry, staging_dir: Path) -> Path:
         """Re-validate the file now (it may have changed since the scan) and
@@ -243,6 +253,7 @@ class SenderService:
         session: bytes,
         entry: FileManifestEntry,
         send_path: Path,
+        report: Callable[[int, int], None],
     ) -> FileSendResult:
         size = send_path.stat().st_size
         transport.send_json_message({
@@ -270,6 +281,7 @@ class SenderService:
             if end > offset:
                 transport.send_all(chunk[max(offset - position, 0):])
             position = end
+            report(position, size)
         if position != size:
             raise RuntimeError("file_changed_while_sending")
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from app.models.manifest import FileManifestEntry, ScanIssue, ScanResult
@@ -16,12 +17,22 @@ class FileScanner:
         self._extension_policy = extension_policy
         self._signature_policy = signature_policy
 
-    def scan(self, source_root: Path, *, exclude: Path | None = None) -> ScanResult:
+    def scan(
+        self,
+        source_root: Path,
+        *,
+        exclude: Path | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> ScanResult:
+        """on_progress(done, total) is called as paths are checked."""
         source_root = source_root.resolve()
         result = ScanResult(source_root=source_root)
         exclude = exclude.resolve() if exclude else None
+        report = on_progress or (lambda done, total: None)
 
-        for path in sorted(source_root.rglob("*")):
+        paths = sorted(source_root.rglob("*"))
+        for done, path in enumerate(paths):
+            report(done, len(paths))
             if exclude is not None and path.is_relative_to(exclude):
                 continue  # the rejected-files folder, if it was put inside the source
             if path.is_symlink():
@@ -64,6 +75,7 @@ class FileScanner:
 
             result.category_entries(category).append(entry)
 
+        report(len(paths), len(paths))
         return result
 
     def _check_signature(self, path: Path, extension: str) -> SignatureResult:

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from app.config.loader import load_app_config
 from app.logging_setup.logging_factory import configure_logging
 from app.ui.receiver.main_window import ReceiverMainWindow
+from app.ui.style import apply_app_style
 from app.utils.platform_paths import resolve_config_path
 
 
@@ -19,8 +20,9 @@ def main() -> int:
     logging.getLogger(__name__).info("receiver.application_started")
 
     app = QApplication(sys.argv)
+    apply_app_style(app)
     window = ReceiverMainWindow(config)
-    window.resize(760, 480)
+    window.resize(780, 600)
     window.show()
     return app.exec()
 
