@@ -7,9 +7,8 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from app.models.manifest import TransferManifest
 from app.models.transfer import AppConfig
-from app.transfer.rejected_files import RejectedFiles, is_file_problem
+from app.transfer.rejected_files import RejectedFiles
 from app.transfer.sender_service import SenderService
-from app.ui.workers.scan_worker import move_rejected
 from app.validation.extension_policy import ExtensionPolicy
 
 
@@ -65,12 +64,6 @@ class SendWorker(QObject):
                 file_progress=self._report_progress,
             )
             results = sender.send_manifest(self.manifest, Path(self.source_root))
-            if self.rejected is not None:
-                move_rejected(self.rejected, [
-                    (item.relative_path, item.reason)
-                    for item in results
-                    if item.status == "rejected" and is_file_problem(item.reason)
-                ], self.progress.emit)
             self.finished.emit(results)
         except Exception as exc:
             self.failed.emit(str(exc))

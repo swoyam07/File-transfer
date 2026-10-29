@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.scanning.scanner import FileScanner
-from app.transfer.rejected_files import RejectedFiles, is_file_problem
+from app.transfer.rejected_files import RejectedFiles, is_unlisted_extension
 from app.validation.extension_policy import ExtensionPolicy
 from app.validation.signature_policy import SignaturePolicy
 
@@ -45,7 +45,7 @@ class ScanWorker(QObject):
                 move_rejected(self.rejected, [
                     (Path(issue.path).relative_to(result.source_root).as_posix(), issue.reason)
                     for issue in result.skipped
-                    if is_file_problem(issue.reason)
+                    if is_unlisted_extension(issue.reason)
                 ], self.progress.emit)
             self.progress.emit("Scan completed.")
             self.finished.emit(result)

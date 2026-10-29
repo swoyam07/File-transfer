@@ -1,6 +1,6 @@
 """
-Moves files that failed the safety checks out of the source folder into one
-"rejected" folder on the sender, so they can be looked at later.
+Moves files whose extension is not in allowed_extensions out of the source
+folder into one "rejected" folder on the sender, so they can be looked at later.
 
 Files are only moved: never repaired, changed or sent. Their subfolders are
 kept, so files from different folders cannot collide, and reasons.csv lists
@@ -17,21 +17,9 @@ from app.utils.time_utils import utc_now_iso
 
 REASONS_FILE = "reasons.csv"
 
-# Reasons that say nothing is wrong with the file itself: it is simply not a
-# type this app sends, or the problem was the network, the receiver or space.
-_NOT_A_FILE_PROBLEM = (
-    "unsupported_extension",
-    "blocked_extension",
-    "symlink_not_allowed",
-    "hash_mismatch",
-    "integrity_tag_invalid",
-    "not_enough_temp_space",
-    "read_error",
-    "duplicate_exists",
-    "extension_not_allowed",
-    "file_too_large",
-    "invalid_file_path",
-)
+# Only files whose extension is not in allowed_extensions are moved. Files with
+# an allowed extension that fail the content checks stay where they are.
+_UNLISTED_EXTENSION = ("unsupported_extension", "blocked_extension")
 
 
 def default_rejected_folder(source_root: Path) -> Path:
@@ -39,9 +27,8 @@ def default_rejected_folder(source_root: Path) -> Path:
     return source_root.parent / f"{source_root.name}_rejected"
 
 
-def is_file_problem(reason: str) -> bool:
-    reason = reason.removeprefix("sender: ").removeprefix("receiver: ")
-    return not reason.startswith(_NOT_A_FILE_PROBLEM)
+def is_unlisted_extension(reason: str) -> bool:
+    return reason in _UNLISTED_EXTENSION
 
 
 class RejectedFiles:

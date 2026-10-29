@@ -31,9 +31,9 @@ max_file_size_bytes = 1099511627776
 max_manifest_bytes = 33554432
 # skip_identical = keep existing, rename_incoming = save as "name (1)", replace = overwrite, fail = skip with error
 duplicate_policy = "replace"
-# SENDER: move files that fail the checks (corrupted, wrong format, unsafe)
+# SENDER: on scan, move files whose extension is not in allowed_extensions
 # out of the source folder into rejected_folder, with reasons.csv saying why.
-# They are moved as they are: not repaired and not sent.
+# Files with an allowed extension are never moved (failing ones are skipped).
 move_rejected_files = true
 
 [storage]
